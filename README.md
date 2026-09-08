@@ -122,7 +122,7 @@ ros2 topic echo /chatter
 own container with the same flags:
 
 ```
-docker run -it --net=host --ipc=host --pid=host frankjoshua/ros2-template
+docker run -it --net=host --ipc=host --pid=host frankjoshua/ros2-face
 ```
 
 ### Robot not showing up?
