@@ -41,4 +41,4 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh \
 COPY ros_entrypoint.sh /ros_entrypoint.sh
 RUN chmod +x /ros_entrypoint.sh
 ENTRYPOINT ["/ros_entrypoint.sh"]
-CMD ["ros2", "run", "example_pkg", "example_node"]
+CMD ["ros2", "run", "robot_face", "face_node"]
