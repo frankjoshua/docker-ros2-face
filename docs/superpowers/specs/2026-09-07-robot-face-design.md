@@ -28,16 +28,19 @@ send raw target positions every frame and the face smooths them.
 
 ## Node: `face_node`
 
-- Package `src/robot_face` (ament_python). Replaces `example_pkg`.
-- Parameter: `port` (int, default 8080).
-- Three subscriptions. Each callback converts the message to a one-key JSON object —
-  `{"expression": "happy"}`, `{"gaze": [x, y]}`, `{"mouth": 0.4}` — stores it as the last value
-  for that key, and puts it on every connected client's `queue.Queue`.
-- HTTP server: stdlib `ThreadingHTTPServer` on a daemon thread.
-  - `GET /` → `index.html` (installed with the package via `data_files`).
-  - `GET /events` → `text/event-stream`. On connect, send the last value of each key, then stream
-    from the client's queue. A failed write removes the client.
-  - Anything else → 404.
+- Package `src/robot_face` (ament_python). Replaces `example_pkg`. One module, three layers:
+  - **`FaceState`** (the rule; stdlib only, no ROS, no HTTP): `expression(name) -> bool`
+    (False for unknown names), `gaze(x, y)` and `mouth(a)` clamp and store; `values` holds the
+    last value per key; `subscribe()` returns a `queue.Queue` pre-loaded with the current values;
+    every later change is put on every subscriber's queue as `(key, value)`.
+  - **HTTP adapter**: stdlib `ThreadingHTTPServer` on a daemon thread, `serve(state, port) -> port`.
+    `GET /` → `index.html` (package data). `GET /events` → `text/event-stream`: subscribe, then
+    write each `(key, value)` as `data: {"key": value}\n\n`. A failed write unsubscribes.
+    Anything else → 404.
+  - **`main()`** (composition root, the only place `rclpy` is imported): declares parameter
+    `port` (int, default 8080), starts the server, and wires three subscriptions —
+    `/face/expression` → `state.expression` (log a warning on False), `/face/gaze` →
+    `state.gaze`, `/face/mouth` → `state.mouth`.
 - Shutdown: HTTP server thread is a daemon; `rclpy.spin` ends on Ctrl-C.
 
 ## Browser: `index.html`
@@ -63,9 +66,12 @@ Single file, no dependencies.
 
 ## Testing
 
-One pytest in `src/robot_face/test/test_face_node.py`: start the node on a random port, open
-`/events` with `urllib`, publish an expression, assert the event arrives within a timeout.
-Runs via `colcon test` in the dev container. The stock flake8/pep257/copyright tests are dropped.
+One pytest file, `src/robot_face/test/test_face_node.py`, no ROS required: (1) `FaceState`
+rejects unknown expressions and clamps gaze/mouth; (2) `serve()` on port 0, connect to `/events`,
+assert the pre-set value is replayed, a later change streams live, `GET /` is 200 with `<svg`,
+unknown paths are 404. Runs with plain pytest or via `colcon test` in the dev container. The
+stock flake8/pep257/copyright tests are dropped. The ROS wiring in `main()` is three lines and is
+covered by the manual smoke test.
 
 Manual smoke test:
 

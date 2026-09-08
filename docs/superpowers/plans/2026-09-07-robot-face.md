@@ -19,7 +19,7 @@
 - Node parameter: `port` (int, default 8080). No other parameters. `GAZE_SPEED` is a JS constant (default 3).
 - SSE events are one-key JSON objects: `{"expression": "happy"}`, `{"gaze": [x, y]}`, `{"mouth": 0.4}`. Replay last value of each key on connect. No heartbeat.
 - No new apt/pip dependencies. No launch files, no custom msgs, no `EXPOSE`.
-- The stock flake8/pep257/copyright tests are dropped. One pytest file only.
+- The stock flake8/pep257/copyright tests are dropped. One pytest file, no ROS in tests.
 - Commit messages end with:
   ```
   Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -51,9 +51,9 @@ Example: `ws colcon build --symlink-install`. The container uses `--net=host`, s
 | `src/robot_face/package.xml` | ROS package manifest, deps |
 | `src/robot_face/setup.py`, `setup.cfg`, `resource/robot_face` | ament_python boilerplate; ships `index.html` as package data; `face_node` console script |
 | `src/robot_face/robot_face/__init__.py` | empty |
-| `src/robot_face/robot_face/face_node.py` | subscriptions, last-value state, SSE fan-out, HTTP handler, `main()` |
+| `src/robot_face/robot_face/face_node.py` | `FaceState` (rule: validate, clamp, last value, fan-out; stdlib only), HTTP adapter (`make_handler`, `serve`), `main()` composition root (only ROS import) |
 | `src/robot_face/robot_face/index.html` | the face: SVG, expression CSS, gaze/mouth/blink JS |
-| `src/robot_face/test/test_face_node.py` | one integration test: replay-on-connect, live event, `GET /` |
+| `src/robot_face/test/test_face_node.py` | two tests, no ROS: `FaceState` validation; HTTP replay, live event, `GET /`, 404 |
 | `Dockerfile` | `CMD` → `face_node` |
 | `README.md` | replace example-node text with the face |
 
@@ -67,81 +67,66 @@ Example: `ws colcon build --symlink-install`. The container uses `--net=host`, s
 - Modify: `Dockerfile` (the `CMD` line, last line of the file)
 
 **Interfaces:**
-- Produces: `class FaceNode(rclpy.node.Node)` with `__init__(self, **kwargs)` (kwargs forwarded to `Node`, so tests pass `parameter_overrides`), attribute `port: int` (actual bound port), attribute `state: dict[str, str]` (key → serialized JSON event). HTTP: `GET /` → `text/html`, `GET /events` → `text/event-stream` lines `data: <json>\n\n`. Console script `face_node`.
+- Produces, in `robot_face/face_node.py`:
+  - `class FaceState` — no ROS, no HTTP. `expression(name: str) -> bool` (False if unknown), `gaze(x: float, y: float)`, `mouth(amplitude: float)`, `values: dict[str, object]` (last value per key), `subscribe() -> queue.Queue` (pre-loaded with current values as `(key, value)` tuples), `unsubscribe(q)`.
+  - `serve(state: FaceState, port: int) -> int` — starts the HTTP server on a daemon thread, returns the bound port. `GET /` → `text/html`, `GET /events` → `text/event-stream` lines `data: {"<key>": <value>}\n\n`.
+  - `main(args=None)` — composition root: the only place `rclpy` is imported. Console script `face_node`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `src/robot_face/test/test_face_node.py`:
 
 ```python
-import threading
-import time
+import json
 import urllib.error
 import urllib.request
 
-import rclpy
-from rclpy.executors import MultiThreadedExecutor
-from rclpy.parameter import Parameter
-from std_msgs.msg import String
-
-from robot_face.face_node import FaceNode
+from robot_face.face_node import FaceState, serve
 
 
-def publish_until(pub, data, done, timeout=5.0):
-    """Publish repeatedly until done() is true; covers DDS discovery delay."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        pub.publish(String(data=data))
-        time.sleep(0.05)
-        if done():
-            return
-    raise AssertionError(f'timed out waiting after publishing {data!r}')
+def read_event(resp):
+    line = resp.readline()
+    assert line.startswith(b'data: ')
+    assert resp.readline() == b'\n'
+    return json.loads(line[6:])
 
 
-def test_replay_then_live_then_index():
-    rclpy.init()
+def test_state_validates_and_keeps_last_value():
+    s = FaceState()
+    assert s.expression('happy')
+    assert not s.expression('bogus')
+    s.gaze(2.0, -5.0)
+    s.mouth(1.7)
+    assert s.values == {'expression': 'happy', 'gaze': [1.0, -1.0], 'mouth': 1.0}
+
+
+def test_http_replay_live_index_404():
+    state = FaceState()
+    state.expression('happy')
+    base = f'http://127.0.0.1:{serve(state, 0)}'
+
+    events = urllib.request.urlopen(f'{base}/events', timeout=5)
+    assert read_event(events) == {'expression': 'happy'}   # replayed on connect
+    state.gaze(0.5, 0.0)
+    assert read_event(events) == {'gaze': [0.5, 0.0]}       # live
+
+    index = urllib.request.urlopen(f'{base}/', timeout=5)
+    assert index.status == 200
+    assert b'<svg' in index.read()
+
     try:
-        node = FaceNode(parameter_overrides=[Parameter('port', value=0)])
-        pub_node = rclpy.create_node('test_pub')
-        pub = pub_node.create_publisher(String, '/face/expression', 10)
-        ex = MultiThreadedExecutor()
-        ex.add_node(node)
-        ex.add_node(pub_node)
-        threading.Thread(target=ex.spin, daemon=True).start()
-        base = f'http://127.0.0.1:{node.port}'
-
-        # replay: value published before connect arrives first
-        publish_until(pub, 'happy', lambda: node.state.get('expression') == '{"expression": "happy"}')
-        events = urllib.request.urlopen(f'{base}/events', timeout=5)
-        assert events.readline() == b'data: {"expression": "happy"}\n'
-        assert events.readline() == b'\n'
-
-        # live: value published after connect streams through
-        pub.publish(String(data='sad'))
-        assert events.readline() == b'data: {"expression": "sad"}\n'
-
-        # unknown expression is ignored (state unchanged, nothing streamed)
-        publish_until(pub, 'bogus', lambda: True)
-        assert node.state['expression'] == '{"expression": "sad"}'
-
-        # index
-        index = urllib.request.urlopen(f'{base}/', timeout=5)
-        assert index.status == 200
-        assert b'<svg' in index.read()
-
-        try:
-            urllib.request.urlopen(f'{base}/nope', timeout=5)
-            assert False, 'expected 404'
-        except urllib.error.HTTPError as e:
-            assert e.code == 404
-    finally:
-        rclpy.shutdown()
+        urllib.request.urlopen(f'{base}/nope', timeout=5)
+        assert False, 'expected 404'
+    except urllib.error.HTTPError as e:
+        assert e.code == 404
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `ws colcon build --symlink-install; ws python3 -m pytest src/robot_face/test -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'robot_face'` (package doesn't exist yet).
+Run: `ws PYTHONPATH=src/robot_face python3 -m pytest src/robot_face/test -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'robot_face'`.
+
+(No ROS or colcon needed for this test; it runs anywhere with pytest. The `ws` wrapper is only because the host has no pytest.)
 
 - [ ] **Step 3: Create the package files**
 
@@ -220,7 +205,7 @@ install_scripts=$base/lib/robot_face
 
 - [ ] **Step 4: Write the node**
 
-`src/robot_face/robot_face/face_node.py`:
+`src/robot_face/robot_face/face_node.py`. Layering: `FaceState` is the rule (validate, clamp, last value, fan-out) and imports nothing but stdlib; `make_handler`/`serve` are the HTTP adapter; `main` is the composition root and the only place ROS appears.
 
 ```python
 import json
@@ -229,11 +214,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 
-import rclpy
-from geometry_msgs.msg import Point
-from rclpy.node import Node
-from std_msgs.msg import Float32, String
-
 EXPRESSIONS = {'neutral', 'happy', 'sad', 'surprised', 'angry', 'sleepy'}
 
 
@@ -241,48 +221,37 @@ def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
-class FaceNode(Node):
-    """Relays /face/* topics to browsers as Server-Sent Events."""
+class FaceState:
+    """Last value per key, fanned out to subscribers. Knows nothing about ROS or HTTP."""
 
-    def __init__(self, **kwargs):
-        super().__init__('face_node', **kwargs)
-        self.declare_parameter('port', 8080)
-        self.state = {}      # key -> last JSON event, replayed to new clients
-        self.clients = []    # one queue.Queue per connected browser
+    def __init__(self):
+        self.values = {}     # key -> last value, replayed to new subscribers
+        self.clients = []    # one queue.Queue per subscriber
         self.lock = threading.Lock()
-        self.create_subscription(String, '/face/expression', self.on_expression, 10)
-        self.create_subscription(Point, '/face/gaze', self.on_gaze, 10)
-        self.create_subscription(Float32, '/face/mouth', self.on_mouth, 10)
 
-        self.server = ThreadingHTTPServer(('', self.get_parameter('port').value), self._handler())
-        self.port = self.server.server_address[1]
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.get_logger().info(f'face at http://0.0.0.0:{self.port}/')
+    def expression(self, name):
+        if name not in EXPRESSIONS:
+            return False
+        self._push('expression', name)
+        return True
 
-    def on_expression(self, msg):
-        if msg.data not in EXPRESSIONS:
-            self.get_logger().warning(f'unknown expression {msg.data!r}')
-            return
-        self.push('expression', msg.data)
+    def gaze(self, x, y):
+        self._push('gaze', [clamp(x, -1.0, 1.0), clamp(y, -1.0, 1.0)])
 
-    def on_gaze(self, msg):
-        self.push('gaze', [clamp(msg.x, -1.0, 1.0), clamp(msg.y, -1.0, 1.0)])
+    def mouth(self, amplitude):
+        self._push('mouth', clamp(amplitude, 0.0, 1.0))
 
-    def on_mouth(self, msg):
-        self.push('mouth', clamp(msg.data, 0.0, 1.0))
-
-    def push(self, key, value):
-        event = json.dumps({key: value})
+    def _push(self, key, value):
         with self.lock:
-            self.state[key] = event
+            self.values[key] = value
             for q in self.clients:
-                q.put(event)
+                q.put((key, value))
 
     def subscribe(self):
         q = queue.Queue()
         with self.lock:
-            for event in self.state.values():
-                q.put(event)
+            for item in self.values.items():
+                q.put(item)
             self.clients.append(q)
         return q
 
@@ -290,57 +259,91 @@ class FaceNode(Node):
         with self.lock:
             self.clients.remove(q)
 
-    def _handler(self):
-        node = self
 
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
+def make_handler(state):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
 
-            def do_GET(self):
-                if self.path == '/':
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'text/html; charset=utf-8')
-                    self.end_headers()
-                    self.wfile.write(files('robot_face').joinpath('index.html').read_bytes())
-                elif self.path == '/events':
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'text/event-stream')
-                    self.send_header('Cache-Control', 'no-cache')
-                    self.end_headers()
-                    q = node.subscribe()
-                    try:
-                        # ponytail: a client that disconnects while idle is only reaped
-                        # on the next event's failed write; add a heartbeat if that leaks.
-                        while True:
-                            self.wfile.write(f'data: {q.get()}\n\n'.encode())
-                            self.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        pass
-                    finally:
-                        node.unsubscribe(q)
-                else:
-                    self.send_error(404)
+        def do_GET(self):
+            if self.path == '/':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(files('robot_face').joinpath('index.html').read_bytes())
+            elif self.path == '/events':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/event-stream')
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                q = state.subscribe()
+                try:
+                    # ponytail: a client that disconnects while idle is only reaped
+                    # on the next event's failed write; add a heartbeat if that leaks.
+                    while True:
+                        key, value = q.get()
+                        self.wfile.write(f'data: {json.dumps({key: value})}\n\n'.encode())
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                finally:
+                    state.unsubscribe(q)
+            else:
+                self.send_error(404)
 
-        return Handler
+    return Handler
+
+
+def serve(state, port):
+    """Start the HTTP server on a daemon thread. Returns the bound port."""
+    server = ThreadingHTTPServer(('', port), make_handler(state))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server.server_address[1]
 
 
 def main(args=None):
+    import rclpy
+    from geometry_msgs.msg import Point
+    from std_msgs.msg import Float32, String
+
     rclpy.init(args=args)
-    node = FaceNode()
+    node = rclpy.create_node('face_node')
+    node.declare_parameter('port', 8080)
+    state = FaceState()
+    port = serve(state, node.get_parameter('port').value)
+    node.get_logger().info(f'face at http://0.0.0.0:{port}/')
+
+    def on_expression(msg):
+        if not state.expression(msg.data):
+            node.get_logger().warning(f'unknown expression {msg.data!r}')
+
+    node.create_subscription(String, '/face/expression', on_expression, 10)
+    node.create_subscription(Point, '/face/gaze', lambda m: state.gaze(m.x, m.y), 10)
+    node.create_subscription(Float32, '/face/mouth', lambda m: state.mouth(m.data), 10)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
         rclpy.try_shutdown()
 ```
 
-- [ ] **Step 5: Build and run the test**
+- [ ] **Step 5: Run the test**
 
-Run: `ws colcon build --symlink-install; ws python3 -m pytest src/robot_face/test -v`
-Expected: PASS (1 test). If `robot_face` still isn't importable, the `ws` helper didn't source `install/setup.bash`; run `ws 'source install/setup.bash && python3 -m pytest src/robot_face/test -v'`.
+Run: `ws PYTHONPATH=src/robot_face python3 -m pytest src/robot_face/test -v`
+Expected: PASS (2 tests).
+
+Then confirm the ROS wiring builds and runs:
+
+```bash
+ws colcon build --symlink-install
+ws colcon test --packages-select robot_face --event-handlers console_direct+   # same 2 tests, via colcon
+ws ros2 run robot_face face_node &
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/               # expect 200
+ws ros2 topic pub -1 /face/expression std_msgs/String "'{data: happy}'"
+curl -s -m 2 http://localhost:8080/events                                      # expect: data: {"expression": "happy"}
+kill %1
+```
 
 - [ ] **Step 6: Remove the example package and repoint the Dockerfile**
 
@@ -491,9 +494,9 @@ Replace `src/robot_face/robot_face/index.html` with:
 </script>
 ```
 
-- [ ] **Step 2: Run the Task 1 test (still passes; it checks for `<svg`)**
+- [ ] **Step 2: Run the Task 1 tests (still pass; one checks for `<svg`)**
 
-Run: `ws python3 -m pytest src/robot_face/test -v`
+Run: `ws PYTHONPATH=src/robot_face python3 -m pytest src/robot_face/test -v`
 Expected: PASS.
 
 - [ ] **Step 3: Verify in a browser**
