@@ -27,6 +27,7 @@ def test_http_replay_live_index_404():
     base = f'http://127.0.0.1:{serve(state, 0)}'
 
     events = urllib.request.urlopen(f'{base}/events', timeout=5)
+    assert events.headers['Content-Type'] == 'text/event-stream'
     assert read_event(events) == {'expression': 'happy'}   # replayed on connect
     state.gaze(0.5, 0.0)
     assert read_event(events) == {'gaze': [0.5, 0.0]}       # live

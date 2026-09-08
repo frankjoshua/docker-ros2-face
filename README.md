@@ -172,15 +172,11 @@ Run the published image (host networking is needed because ROS 2 DDS uses epheme
 docker run -it --network=host --ipc=host --pid=host frankjoshua/ros2-face
 ```
 
-## Use as a template
+## Built on the ROS 2 template
 
-This repo is a GitHub template. After creating your own repo from it:
-
-- Add your packages under `src/`.
-- Put shared dependencies in the `base` stage of the `Dockerfile`.
-- Update the image name in `.github/workflows/ci.yml` (`DOCKER_CONTAINER`) and the `build.sh`
-  commands above.
-- Set the `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repository secrets if you want CI to publish.
+This repo was created from [docker-ros2-template](https://github.com/frankjoshua/docker-ros2-template).
+Shared dependencies go in the `base` stage of the `Dockerfile`; the image name lives in
+`.github/workflows/ci.yml` (`DOCKER_CONTAINER`) and the `build.sh` commands above.
 
 ## License
 

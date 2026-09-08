@@ -3,3 +3,5 @@ build/
 install/
 log/
 .serena/
+__pycache__/
+.devcontainer/devcontainer-lock.json

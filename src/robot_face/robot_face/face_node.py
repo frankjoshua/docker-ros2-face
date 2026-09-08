@@ -74,7 +74,7 @@ def make_handler(state):
                         key, value = q.get()
                         self.wfile.write(f'data: {json.dumps({key: value})}\n\n'.encode())
                         self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
+                except OSError:
                     pass
                 finally:
                     state.unsubscribe(q)
