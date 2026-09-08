@@ -76,6 +76,7 @@ Create `src/robot_face/test/test_face_node.py`:
 ```python
 import threading
 import time
+import urllib.error
 import urllib.request
 
 import rclpy
@@ -128,23 +129,14 @@ def test_replay_then_live_then_index():
         assert index.status == 200
         assert b'<svg' in index.read()
 
-        assert urllib.request.urlopen(f'{base}/nope', timeout=5).status == 404
-    finally:
-        rclpy.shutdown()
-```
-
-The last `assert` on 404 will raise `HTTPError`; wrap it:
-
-```python
-        import urllib.error
         try:
             urllib.request.urlopen(f'{base}/nope', timeout=5)
             assert False, 'expected 404'
         except urllib.error.HTTPError as e:
             assert e.code == 404
+    finally:
+        rclpy.shutdown()
 ```
-
-Use the wrapped form in the file (replace the bare `assert ... == 404` line with it; move `import urllib.error` to the top imports).
 
 - [ ] **Step 2: Run it to verify it fails**
 
