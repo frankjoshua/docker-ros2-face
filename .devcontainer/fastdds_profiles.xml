@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Loaded via FASTRTPS_DEFAULT_PROFILES_FILE (set in devcontainer.json).
+
+  Wi-Fi networks commonly drop the multicast packets DDS discovery relies on, so a
+  robot on the same LAN stays invisible even though unicast (ssh, ping) works. The
+  fix that needs no changes on the robot: announce directly to its IP. Uncomment
+  the initialPeersList below, set your robot's address, and rebuild the container
+  (or export FASTRTPS_DEFAULT_PROFILES_FILE in a shell and restart the ros2 daemon).
+  A VPN address (e.g. the robot's Tailscale IP) works too and survives leaving the LAN.
+
+  maxInitialPeersRange is how many participant ports are probed per peer; a robot
+  running many nodes/containers needs more than the Fast DDS default of 4.
+
+  UDP-only (no shared memory) also avoids stale /dev/shm segments that survive
+  container restarts when running with ipc:host.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <transport_descriptors>
+        <transport_descriptor>
+            <transport_id>udp_unicast_peers</transport_id>
+            <type>UDPv4</type>
+            <maxInitialPeersRange>64</maxInitialPeersRange>
+        </transport_descriptor>
+    </transport_descriptors>
+    <participant profile_name="default_participant" is_default_profile="true">
+        <rtps>
+            <userTransports>
+                <transport_id>udp_unicast_peers</transport_id>
+            </userTransports>
+            <useBuiltinTransports>false</useBuiltinTransports>
+            <!-- Uncomment and set your robot's IP if `ros2 topic list` can't see it:
+            <builtin>
+                <initialPeersList>
+                    <locator>
+                        <udpv4>
+                            <address>192.168.2.50</address>
+                        </udpv4>
+                    </locator>
+                </initialPeersList>
+            </builtin>
+            -->
+        </rtps>
+    </participant>
+</profiles>

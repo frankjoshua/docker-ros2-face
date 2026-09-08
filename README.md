@@ -1,0 +1,166 @@
+# ROS 2 Template [![CI](https://github.com/frankjoshua/docker-ros2-template/workflows/CI/badge.svg)](https://github.com/frankjoshua/docker-ros2-template/actions) [![](https://img.shields.io/docker/pulls/frankjoshua/ros2-template)](https://hub.docker.com/r/frankjoshua/ros2-template)
+
+A GitHub template for quick ROS 2 **development** and **deployment**. It gives you a VS Code dev
+container to work in and a multi-architecture image to ship — both built from a single multi-stage
+`Dockerfile`, so what you develop against is exactly what you deploy.
+
+## How it works
+
+One `Dockerfile`, three stages, all built from the same base image. The distro is set in one place —
+the `BASE_IMAGE` arg at the top of the [Dockerfile](Dockerfile) (`frankjoshua/ros2:humble` by
+default). Change that line to target any ROS 2 version; the dev container and `build.sh` both
+inherit it, and everything else keys off `$ROS_DISTRO` (set by the base image). The stages:
+
+- **`base`** — shared dependencies. Add every extra apt/pip package here so dev and deploy can't
+  drift apart.
+- **`dev`** — `base` + the image's non-root `ubuntu` user (with passwordless sudo) + an interactive shell. This is what VS Code opens. Your
+  workspace is bind-mounted (not copied) and you build it inside the container.
+- **`prod`** — `base` + your `src/` copied in and `colcon build`-ed, with an entrypoint that runs the
+  example node. This is what `build.sh` / CI publish.
+
+```
+.
+├── .devcontainer/devcontainer.json   # opens the dev stage
+├── Dockerfile                        # base / dev / prod
+├── build.sh                          # multi-arch build + push (prod stage)
+├── ros_entrypoint.sh                 # sources ROS + workspace for the prod image
+└── src/                              # your colcon packages (repo root is the workspace)
+    └── example_pkg/
+```
+
+## Develop
+
+1. Install Docker, VS Code, and the **Dev Containers** extension.
+2. Open this folder in VS Code.
+3. `Ctrl+Shift+P` → **Dev Containers: Reopen in Container**. The first build pulls the base image.
+4. Open a terminal — ROS is already sourced, so `ros2` works immediately. Build and run the example:
+   ```
+   colcon build --symlink-install
+   source install/setup.bash   # or just open a new terminal — the workspace overlay auto-sources
+   ros2 run example_pkg example_node
+   ```
+
+The repo root is the colcon workspace (`/home/ws` in the container), so `build/`, `install/`, and
+`log/` appear here and are git-ignored. The container runs as the non-root **`ubuntu`** user, which
+is already in the `dialout`/`video`/`plugdev` groups — handy for serial devices and cameras. The
+container also includes the `claude-code` dev container feature (Node.js + Claude Code), so coding
+agents work out of the box.
+
+### Without VS Code
+
+The same config works with any devcontainer-spec tool — the
+[devcontainer CLI](https://github.com/devcontainers/cli), herdr, etc.:
+
+```
+devcontainer up --workspace-folder .    # build & start
+devcontainer exec --workspace-folder . bash
+```
+
+Add `--remove-existing-container` to `devcontainer up` to rebuild after changing
+`devcontainer.json` or the `Dockerfile`. Whatever tool you use, keep the repo mounted at `/home/ws`
+— the dev shell auto-sources `/home/ws/install/setup.bash`, so colcon output (`install/`) is
+expected there.
+
+> **Claude settings:** the devcontainer bind-mounts your host `~/.claude` and `~/.claude.json`, so
+> your subscription login, settings, and skills carry into the container. If the host files don't
+> exist yet, run `claude` once on the host first (Docker would otherwise create them root-owned).
+> You may see non-blocking hook errors — host settings can reference absolute host paths (hooks,
+> binaries) that don't exist in the container. Mount those paths too, or ignore the errors; remove
+> the two mounts from `devcontainer.json` for a fully isolated container.
+
+## Multiple nodes & local-network discovery
+
+Nodes can talk to each other — on this machine or across your LAN — out of the box. The dev
+container (`.devcontainer/devcontainer.json`) sets:
+
+- **`--net=host --ipc=host --pid=host`** (`runArgs`): host networking for LAN discovery; shared
+  memory for same-host transport (**`--ipc=host` is required** — without a shared `/dev/shm`, Fast
+  DDS instances silently fail to connect); and unique DDS GUIDs across containers.
+- **`ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET`** (`containerEnv`): discover nodes anywhere on the local
+  subnet, not just this host. Use `LOCALHOST` to restrict discovery to this machine.
+- **`ROS_DOMAIN_ID=0`** (`containerEnv`): only nodes sharing this ID discover each other. Give each
+  project/person a unique ID to stay isolated on a shared LAN.
+
+### Quick pub/sub test
+
+In two terminals — same container, two containers, or two machines on the LAN:
+
+```
+# A — publisher
+ros2 topic pub /chatter std_msgs/msg/String "{data: hello}"
+
+# B — subscriber
+ros2 topic echo /chatter
+```
+
+`ros2 topic list` and `ros2 node list` should show the other side. Launch another instance as its
+own container with the same flags:
+
+```
+docker run -it --net=host --ipc=host --pid=host frankjoshua/ros2-template
+```
+
+### Robot not showing up?
+
+`SUBNET` discovery uses multicast — reliable on wired LANs, but Wi-Fi networks commonly block it
+(unicast like ssh still works, so the robot seems reachable yet `ros2 topic list` shows nothing).
+The fix, no changes on the robot:
+
+1. In [`.devcontainer/fastdds_profiles.xml`](.devcontainer/fastdds_profiles.xml), uncomment the
+   `initialPeersList` block and set your robot's IP. A VPN IP (e.g. the robot's Tailscale
+   address) works too and keeps discovery alive off-LAN. Discovery then runs over unicast.
+2. If the robot runs many nodes/containers, raise `maxInitialPeersRange` (the file defaults
+   to 64) — too low and only the robot's first few nodes are discovered.
+3. Rebuild the container (`devcontainer up --workspace-folder . --remove-existing-container`),
+   then run `ros2 daemon stop` before checking `ros2 topic list`.
+
+**The daemon will lie to you.** `ros2 topic list` asks a long-running daemon, and with
+`--net=host` *all* containers on the machine share the single daemon — whichever shell spawned it
+first, with whatever discovery config that shell had. After any change to profiles, peers, or
+`ROS_DOMAIN_ID`, run `ros2 daemon stop` (it respawns on the next command). To bypass it while
+debugging, use `ros2 topic list --no-daemon`: if that shows the robot but the plain command
+doesn't, a stale daemon is answering.
+
+Alternatively run a Fast DDS Discovery Server and point nodes at it with
+`ROS_DISCOVERY_SERVER=<host-ip>:11811`.
+
+## Deploy (build & publish a multi-arch image)
+
+`build.sh` builds the `prod` stage for amd64 + arm64 with `docker buildx`.
+
+Local single-arch build:
+```
+./build.sh -t frankjoshua/ros2-template -l
+```
+
+Multi-arch build and push to Docker Hub:
+```
+./build.sh -t frankjoshua/ros2-template -p
+```
+
+GitHub Actions publishes on every push to `main` (see `.github/workflows/ci.yml`). It expects the
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
+
+Run the published image (host networking is needed because ROS 2 DDS uses ephemeral ports;
+`--ipc=host` enables shared-memory transport between containers; `--pid=host` keeps DDS GUIDs unique):
+```
+docker run -it --network=host --ipc=host --pid=host frankjoshua/ros2-template
+```
+
+## Use as a template
+
+This repo is a GitHub template. After creating your own repo from it:
+
+- Add your packages under `src/`.
+- Put shared dependencies in the `base` stage of the `Dockerfile`.
+- Update the image name in `.github/workflows/ci.yml` (`DOCKER_CONTAINER`) and the `build.sh`
+  commands above.
+- Set the `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repository secrets if you want CI to publish.
+
+## License
+
+Apache 2.0
+
+## Author
+
+Joshua Frank [@frankjoshua77](https://www.twitter.com/@frankjoshua77) · [roboticsascode.com](http://roboticsascode.com)
