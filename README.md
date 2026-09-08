@@ -1,8 +1,8 @@
-# ROS 2 Template [![CI](https://github.com/frankjoshua/docker-ros2-template/workflows/CI/badge.svg)](https://github.com/frankjoshua/docker-ros2-template/actions) [![](https://img.shields.io/docker/pulls/frankjoshua/ros2-template)](https://hub.docker.com/r/frankjoshua/ros2-template)
+# Robot Face [![CI](https://github.com/frankjoshua/docker-ros2-face/workflows/CI/badge.svg)](https://github.com/frankjoshua/docker-ros2-face/actions) [![](https://img.shields.io/docker/pulls/frankjoshua/ros2-face)](https://hub.docker.com/r/frankjoshua/ros2-face)
 
-A GitHub template for quick ROS 2 **development** and **deployment**. It gives you a VS Code dev
-container to work in and a multi-architecture image to ship — both built from a single multi-stage
-`Dockerfile`, so what you develop against is exactly what you deploy.
+A robot face for a monitor on a robot. A ROS 2 node relays /face/* topics to a browser page over
+Server-Sent Events; the page animates the face. Built on the ROS 2 template (dev container +
+multi-arch prod image from one Dockerfile).
 
 ## How it works
 
@@ -16,7 +16,7 @@ inherit it, and everything else keys off `$ROS_DISTRO` (set by the base image). 
 - **`dev`** — `base` + the image's non-root `ubuntu` user (with passwordless sudo) + an interactive shell. This is what VS Code opens. Your
   workspace is bind-mounted (not copied) and you build it inside the container.
 - **`prod`** — `base` + your `src/` copied in and `colcon build`-ed, with an entrypoint that runs the
-  example node. This is what `build.sh` / CI publish.
+  face node. This is what `build.sh` / CI publish.
 
 ```
 .
@@ -25,7 +25,7 @@ inherit it, and everything else keys off `$ROS_DISTRO` (set by the base image). 
 ├── build.sh                          # multi-arch build + push (prod stage)
 ├── ros_entrypoint.sh                 # sources ROS + workspace for the prod image
 └── src/                              # your colcon packages (repo root is the workspace)
-    └── example_pkg/
+    └── robot_face/
 ```
 
 ## Develop
@@ -33,12 +33,13 @@ inherit it, and everything else keys off `$ROS_DISTRO` (set by the base image). 
 1. Install Docker, VS Code, and the **Dev Containers** extension.
 2. Open this folder in VS Code.
 3. `Ctrl+Shift+P` → **Dev Containers: Reopen in Container**. The first build pulls the base image.
-4. Open a terminal — ROS is already sourced, so `ros2` works immediately. Build and run the example:
+4. Open a terminal — ROS is already sourced, so `ros2` works immediately. Build and run the face node:
    ```
    colcon build --symlink-install
-   source install/setup.bash   # or just open a new terminal — the workspace overlay auto-sources
-   ros2 run example_pkg example_node
+   source install/setup.bash
+   ros2 run robot_face face_node
    ```
+   then open `http://localhost:8080/` in a browser (the container uses host networking).
 
 The repo root is the colcon workspace (`/home/ws` in the container), so `build/`, `install/`, and
 `log/` appear here and are git-ignored. The container runs as the non-root **`ubuntu`** user, which
@@ -67,6 +68,30 @@ expected there.
 > You may see non-blocking hook errors — host settings can reference absolute host paths (hooks,
 > binaries) that don't exist in the container. Mount those paths too, or ignore the errors; remove
 > the two mounts from `devcontainer.json` for a fully isolated container.
+
+## Face
+
+`face_node` serves the face at `http://<robot>:8080/` and streams updates over Server-Sent Events.
+Point any kiosk browser at it (`chromium --kiosk http://localhost:8080/`). Nothing is published.
+
+| Topic              | Type                  | Meaning |
+|--------------------|-----------------------|---------|
+| `/face/expression` | `std_msgs/String`     | `neutral`, `happy`, `sad`, `surprised`, `angry`, `sleepy`. Unknown values are ignored. |
+| `/face/gaze`       | `geometry_msgs/Point` | Look target. `x`, `y` in -1..1, (0,0) = straight ahead, +x right, +y up. `z` ignored. |
+| `/face/mouth`      | `std_msgs/Float32`    | Mouth opening 0..1. Publish at audio RMS rate (~20–30 Hz). Mouth closes if no sample for 300 ms. |
+
+Smoke test:
+
+```
+ros2 topic pub -1 /face/expression std_msgs/String "{data: happy}"
+ros2 topic pub -1 /face/gaze geometry_msgs/Point "{x: 0.8, y: 0.2}"
+ros2 topic pub -r 20 /face/mouth std_msgs/Float32 "{data: 0.7}"
+```
+
+Parameter: `port` (default 8080). Gaze slew speed is `GAZE_SPEED` at the top of the script in
+`src/robot_face/robot_face/index.html`.
+
+Test: `colcon test --packages-select robot_face --event-handlers console_direct+`
 
 ## Multiple nodes & local-network discovery
 
@@ -130,12 +155,12 @@ Alternatively run a Fast DDS Discovery Server and point nodes at it with
 
 Local single-arch build:
 ```
-./build.sh -t frankjoshua/ros2-template -l
+./build.sh -t frankjoshua/ros2-face -l
 ```
 
 Multi-arch build and push to Docker Hub:
 ```
-./build.sh -t frankjoshua/ros2-template -p
+./build.sh -t frankjoshua/ros2-face -p
 ```
 
 GitHub Actions publishes on every push to `main` (see `.github/workflows/ci.yml`). It expects the
@@ -144,7 +169,7 @@ GitHub Actions publishes on every push to `main` (see `.github/workflows/ci.yml`
 Run the published image (host networking is needed because ROS 2 DDS uses ephemeral ports;
 `--ipc=host` enables shared-memory transport between containers; `--pid=host` keeps DDS GUIDs unique):
 ```
-docker run -it --network=host --ipc=host --pid=host frankjoshua/ros2-template
+docker run -it --network=host --ipc=host --pid=host frankjoshua/ros2-face
 ```
 
 ## Use as a template

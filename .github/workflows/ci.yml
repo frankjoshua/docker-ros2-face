@@ -19,7 +19,7 @@ on:
     - cron: '1 2 3 * *'
 
 env:
-  DOCKER_CONTAINER: frankjoshua/ros2-template
+  DOCKER_CONTAINER: frankjoshua/ros2-face
 
 jobs:
   docker:
