@@ -1,4 +1,6 @@
+import base64
 import json
+import math
 import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,6 +11,12 @@ EXPRESSIONS = {'neutral', 'happy', 'sad', 'surprised', 'angry', 'sleepy'}
 
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
+
+
+def yaw_to_quaternion(yaw):
+    """Quaternion (x, y, z, w) for a rotation of `yaw` radians about Z. Avoids a
+    tf_transformations dependency for this one conversion."""
+    return (0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
 
 
 class FaceState:
@@ -147,20 +155,47 @@ def diagnostic_array_to_json(msg):
 
 def main(args=None):
     import rclpy
+    import tf2_ros
     from diagnostic_msgs.msg import DiagnosticArray
-    from geometry_msgs.msg import Point
+    from geometry_msgs.msg import Point, PoseStamped, Quaternion
+    from nav_msgs.msg import OccupancyGrid
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
     from std_msgs.msg import Float32, String
 
     rclpy.init(args=args)
     node = rclpy.create_node('face_node')
     node.declare_parameter('port', 8080)
+    node.declare_parameter('map_frame', 'map')
+    node.declare_parameter('base_frame', 'base_link')
+    node.declare_parameter('goal_topic', 'goal_pose')
+    map_frame = node.get_parameter('map_frame').value
+    base_frame = node.get_parameter('base_frame').value
+
     state = FaceState()
-    port = serve(state, node.get_parameter('port').value)
+    last_pose = [0.0, 0.0, 0.0]  # x, y, theta; faces the goal heading toward the tap
+    goal_pub = node.create_publisher(PoseStamped, node.get_parameter('goal_topic').value, 10)
+
+    def publish_goal(x, y):
+        theta = math.atan2(y - last_pose[1], x - last_pose[0])
+        qx, qy, qz, qw = yaw_to_quaternion(theta)
+        msg = PoseStamped()
+        msg.header.frame_id = map_frame
+        msg.pose.position.x = x
+        msg.pose.position.y = y
+        msg.pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
+        goal_pub.publish(msg)
+
+    port = serve(state, node.get_parameter('port').value, publish_goal)
     node.get_logger().info(f'face at http://0.0.0.0:{port}/')
 
     def on_expression(msg):
         if not state.expression(msg.data):
             node.get_logger().warning(f'unknown expression {msg.data!r}')
+
+    def on_map(msg):
+        state.map(msg.info.resolution, msg.info.width, msg.info.height,
+                   [msg.info.origin.position.x, msg.info.origin.position.y],
+                   base64.b64encode(msg.data.tobytes()).decode('ascii'))
 
     node.create_subscription(String, '/face/expression', on_expression, 10)
     node.create_subscription(Point, '/face/gaze', lambda m: state.gaze(m.x, m.y), 10)
@@ -168,6 +203,28 @@ def main(args=None):
     node.create_subscription(
         DiagnosticArray, '/diagnostics',
         lambda m: state.diagnostics(diagnostic_array_to_json(m)), 10)
+    map_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                          durability=DurabilityPolicy.TRANSIENT_LOCAL)
+    node.create_subscription(OccupancyGrid, '/map', on_map, map_qos)
+
+    tf_buffer = tf2_ros.Buffer()
+    tf2_ros.TransformListener(tf_buffer, node)
+
+    def on_pose_timer():
+        try:
+            t = tf_buffer.lookup_transform(map_frame, base_frame, rclpy.time.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return
+        q = t.transform.rotation
+        theta = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        last_pose[0] = t.transform.translation.x
+        last_pose[1] = t.transform.translation.y
+        last_pose[2] = theta
+        state.pose(*last_pose)
+
+    node.create_timer(0.2, on_pose_timer)
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
