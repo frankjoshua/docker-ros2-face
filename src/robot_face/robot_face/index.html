@@ -70,6 +70,20 @@
   .level-3 .diag-dot { background: #888; color: #888; }
   #diag-empty { position: absolute; inset: 0; display: flex; align-items: center;
     justify-content: center; font-size: 20px; letter-spacing: 4px; opacity: .5; }
+
+  /* --- map mode --- */
+  #map-layer { position: fixed; inset: 0; background: #000; }
+  #map-layer[hidden] { display: none; }
+  #map-canvas { width: 100vw; height: 100vh; display: block; cursor: crosshair; }
+  #map-empty { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; letter-spacing: 4px; opacity: .5;
+    font-family: 'Courier New', ui-monospace, monospace; color: #4ff; }
+  #map-back, #diag-map-btn { position: absolute; top: 24px; background: transparent;
+    color: #4ff; border: 2px solid #4ff; font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 16px; padding: 8px 16px; letter-spacing: 2px; cursor: pointer; z-index: 1; }
+  #map-back:active, #diag-map-btn:active { background: rgba(68,255,255,.2); }
+  #map-back { left: 32px; }
+  #diag-map-btn { right: 32px; }
 </style>
 
 <div id="face-layer">
@@ -95,8 +109,15 @@
   <div class="diag-corner br"></div>
   <div class="diag-scanline"></div>
   <div class="diag-header">DIAGNOSTICS</div>
-  <button id="diag-back">&larr; BACK</button>
+  <button id="diag-back">&larr; FACE</button>
+  <button id="diag-map-btn">MAP &rarr;</button>
   <div id="diag-list"></div>
+</div>
+
+<div id="map-layer" hidden>
+  <button id="map-back">&larr; DIAGNOSTICS</button>
+  <canvas id="map-canvas"></canvas>
+  <div id="map-empty">NO MAP DATA</div>
 </div>
 
 <script>
@@ -112,6 +133,12 @@
   const faceLayer = document.getElementById('face-layer');
   const diagLayer = document.getElementById('diag-layer');
   const diagList = document.getElementById('diag-list');
+  const diagMapBtn = document.getElementById('diag-map-btn');
+  const mapLayer = document.getElementById('map-layer');
+  const mapBack = document.getElementById('map-back');
+  const mapCanvas = document.getElementById('map-canvas');
+  const mapEmpty = document.getElementById('map-empty');
+  const mapCtx = mapCanvas.getContext('2d');
 
   let gaze = [0, 0], gazeTarget = [0, 0];
   let mouth = 0, mouthTarget = 0, mouthAt = 0;
@@ -139,6 +166,109 @@
       </div>`).join('');
   }
 
+  let mapInfo = null;    // {resolution, width, height, origin} of the last-rendered map
+  let mapBitmap = null;  // offscreen canvas holding the pre-rendered grid
+  let mapDraw = null;    // {scale, offsetX, offsetY}: map-pixel <-> canvas-pixel
+  let robotPose = null;  // [x, y, theta] in map-frame meters/radians
+
+  function renderMap(m) {
+    mapInfo = { resolution: m.resolution, width: m.width, height: m.height, origin: m.origin };
+    const raw = atob(m.data);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const cells = new Int8Array(bytes.buffer);
+
+    const off = document.createElement('canvas');
+    off.width = m.width;
+    off.height = m.height;
+    const octx = off.getContext('2d');
+    const img = octx.createImageData(m.width, m.height);
+    for (let row = 0; row < m.height; row++) {
+      for (let col = 0; col < m.width; col++) {
+        const cell = cells[row * m.width + col];
+        const di = ((m.height - 1 - row) * m.width + col) * 4; // flip: row 0 is the map's bottom
+        let v;
+        if (cell < 0) v = [40, 40, 40];        // unknown -> dark gray
+        else if (cell < 50) v = [10, 10, 10];  // free -> near-black
+        else v = [60, 255, 255];               // occupied -> cyan
+        img.data[di] = v[0]; img.data[di + 1] = v[1]; img.data[di + 2] = v[2]; img.data[di + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    mapBitmap = off;
+    mapEmpty.hidden = true;
+    if (!mapLayer.hidden) drawMap();
+  }
+
+  // ponytail: assumes the map origin has zero yaw (true for virtually all SLAM-generated
+  // maps). A rotated origin would need a rotation term here; add if a map ever has one.
+  function mapToCanvas(x, y) {
+    const col = (x - mapInfo.origin[0]) / mapInfo.resolution;
+    const row = (y - mapInfo.origin[1]) / mapInfo.resolution;
+    return [mapDraw.offsetX + col * mapDraw.scale,
+            mapDraw.offsetY + (mapInfo.height - 1 - row) * mapDraw.scale];
+  }
+
+  function canvasToMap(px, py) {
+    const col = (px - mapDraw.offsetX) / mapDraw.scale;
+    const row = mapInfo.height - 1 - (py - mapDraw.offsetY) / mapDraw.scale;
+    return [mapInfo.origin[0] + col * mapInfo.resolution, mapInfo.origin[1] + row * mapInfo.resolution];
+  }
+
+  function drawMap() {
+    if (!mapBitmap) return;
+    mapCanvas.width = window.innerWidth;
+    mapCanvas.height = window.innerHeight;
+    const scale = Math.min(mapCanvas.width / mapBitmap.width, mapCanvas.height / mapBitmap.height);
+    const offsetX = (mapCanvas.width - mapBitmap.width * scale) / 2;
+    const offsetY = (mapCanvas.height - mapBitmap.height * scale) / 2;
+    mapDraw = { scale, offsetX, offsetY };
+    mapCtx.imageSmoothingEnabled = false;
+    mapCtx.fillStyle = '#000';
+    mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+    mapCtx.drawImage(mapBitmap, offsetX, offsetY, mapBitmap.width * scale, mapBitmap.height * scale);
+    drawRobot();
+  }
+
+  function drawRobot() {
+    if (!robotPose || !mapDraw || !mapInfo) return;
+    const [px, py] = mapToCanvas(robotPose[0], robotPose[1]);
+    mapCtx.save();
+    mapCtx.translate(px, py);
+    mapCtx.rotate(-robotPose[2]);
+    mapCtx.fillStyle = '#4ff';
+    mapCtx.shadowColor = '#4ff';
+    mapCtx.shadowBlur = 12;
+    mapCtx.beginPath();
+    mapCtx.moveTo(14, 0);
+    mapCtx.lineTo(-10, 8);
+    mapCtx.lineTo(-10, -8);
+    mapCtx.closePath();
+    mapCtx.fill();
+    mapCtx.restore();
+  }
+
+  mapCanvas.addEventListener('click', (e) => {
+    if (!mapInfo || !mapDraw) return;
+    const rect = mapCanvas.getBoundingClientRect();
+    const [x, y] = canvasToMap(e.clientX - rect.left, e.clientY - rect.top);
+    fetch('/goal', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ x, y }) });
+  });
+
+  diagMapBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    diagLayer.hidden = true;
+    mapLayer.hidden = false;
+    mapEmpty.hidden = !!mapBitmap;
+    if (mapBitmap) drawMap();
+  });
+  mapBack.addEventListener('click', (e) => {
+    e.stopPropagation();
+    mapLayer.hidden = true;
+    diagLayer.hidden = false;
+  });
+
   faceLayer.addEventListener('click', () => {
     faceLayer.hidden = true;
     diagLayer.hidden = false;
@@ -157,6 +287,8 @@
     if (m.gaze) gazeTarget = m.gaze;
     if (m.mouth !== undefined) { mouthTarget = m.mouth; mouthAt = performance.now(); }
     if (m.diagnostics) { diagnostics = m.diagnostics; scheduleDiagRender(); }
+    if (m.map) renderMap(m.map);
+    if (m.pose) { robotPose = m.pose; if (!mapLayer.hidden) drawMap(); }
   };
 
   let last = performance.now();
