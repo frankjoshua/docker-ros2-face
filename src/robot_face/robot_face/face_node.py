@@ -173,10 +173,11 @@ def main(args=None):
 
     state = FaceState()
     last_pose = [0.0, 0.0, 0.0]  # x, y, theta; faces the goal heading toward the tap
+    has_pose = False  # no TF lookup has succeeded yet; identity heading until one does
     goal_pub = node.create_publisher(PoseStamped, node.get_parameter('goal_topic').value, 10)
 
     def publish_goal(x, y):
-        theta = math.atan2(y - last_pose[1], x - last_pose[0])
+        theta = math.atan2(y - last_pose[1], x - last_pose[0]) if has_pose else 0.0
         qx, qy, qz, qw = yaw_to_quaternion(theta)
         msg = PoseStamped()
         msg.header.frame_id = map_frame
@@ -211,6 +212,7 @@ def main(args=None):
     tf2_ros.TransformListener(tf_buffer, node)
 
     def on_pose_timer():
+        nonlocal has_pose
         try:
             t = tf_buffer.lookup_transform(map_frame, base_frame, rclpy.time.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
@@ -221,6 +223,7 @@ def main(args=None):
         last_pose[0] = t.transform.translation.x
         last_pose[1] = t.transform.translation.y
         last_pose[2] = theta
+        has_pose = True
         state.pose(*last_pose)
 
     node.create_timer(0.2, on_pose_timer)
