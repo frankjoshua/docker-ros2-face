@@ -22,6 +22,9 @@ class FaceState:
         # components, so this accumulates a running list instead of replacing it.
         # Mutated only from the single ROS callback thread, so no lock needed here.
         self._diagnostics = {}
+        # dedup identical /map pushes; mutated only from the single ROS callback
+        # thread, like _diagnostics, so no lock needed here either.
+        self._last_map = None
 
     def expression(self, name):
         if name not in EXPRESSIONS:
@@ -39,6 +42,17 @@ class FaceState:
         for status in statuses:
             self._diagnostics[status['name']] = status
         self._push('diagnostics', list(self._diagnostics.values()))
+
+    def map(self, resolution, width, height, origin, data_b64):
+        payload = {'resolution': resolution, 'width': width, 'height': height,
+                   'origin': origin, 'data': data_b64}
+        if payload == self._last_map:
+            return
+        self._last_map = payload
+        self._push('map', payload)
+
+    def pose(self, x, y, theta):
+        self._push('pose', [x, y, theta])
 
     def _push(self, key, value):
         with self.lock:
@@ -59,7 +73,7 @@ class FaceState:
             self.clients.remove(q)
 
 
-def make_handler(state):
+def make_handler(state, publish_goal):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -90,12 +104,29 @@ def make_handler(state):
             else:
                 self.send_error(404)
 
+        def do_POST(self):
+            if self.path != '/goal':
+                self.send_error(404)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                body = json.loads(self.rfile.read(length))
+                x, y = float(body['x']), float(body['y'])
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+                self.send_error(400)
+                return
+            publish_goal(x, y)
+            self.send_response(204)
+            self.end_headers()
+
     return Handler
 
 
-def serve(state, port):
+def serve(state, port, publish_goal=None):
     """Start the HTTP server on a daemon thread. Returns the bound port."""
-    server = ThreadingHTTPServer(('', port), make_handler(state))
+    if publish_goal is None:
+        publish_goal = lambda x, y: None
+    server = ThreadingHTTPServer(('', port), make_handler(state, publish_goal))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server.server_address[1]
 
