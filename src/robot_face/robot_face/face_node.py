@@ -116,10 +116,15 @@ def make_handler(state, publish_goal):
             if self.path != '/goal':
                 self.send_error(404)
                 return
+            if not self.headers.get('Content-Type', '').startswith('application/json'):
+                self.send_error(400)
+                return
             length = int(self.headers.get('Content-Length', 0))
             try:
                 body = json.loads(self.rfile.read(length))
                 x, y = float(body['x']), float(body['y'])
+                if not (math.isfinite(x) and math.isfinite(y)):
+                    raise ValueError('non-finite coordinate')
             except (ValueError, KeyError, TypeError, json.JSONDecodeError):
                 self.send_error(400)
                 return
@@ -172,6 +177,9 @@ def main(args=None):
     base_frame = node.get_parameter('base_frame').value
 
     state = FaceState()
+    # last_pose/has_pose are written by the ROS timer thread and read by HTTP handler
+    # threads with no lock — safe in practice (GIL-atomic ops), same assumption FaceState
+    # documents for _diagnostics/_last_map.
     last_pose = [0.0, 0.0, 0.0]  # x, y, theta; faces the goal heading toward the tap
     has_pose = False  # no TF lookup has succeeded yet; identity heading until one does
     goal_pub = node.create_publisher(PoseStamped, node.get_parameter('goal_topic').value, 10)

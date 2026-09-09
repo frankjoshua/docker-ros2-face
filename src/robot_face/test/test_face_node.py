@@ -88,11 +88,23 @@ def test_post_goal_calls_publish_and_validates():
     assert resp.status == 204
     assert calls == [(1.5, -2.0)]
 
-    for bad_body in (b'not json', b'{"x": 1.5}', b'{"x": "nope", "y": 1}'):
-        req = urllib.request.Request(base + '/goal', data=bad_body, method='POST')
+    for bad_body in (b'not json', b'{"x": 1.5}', b'{"x": "nope", "y": 1}',
+                     b'{"x": NaN, "y": 1}', b'{"x": Infinity, "y": 1}'):
+        req = urllib.request.Request(
+            base + '/goal', data=bad_body,
+            headers={'Content-Type': 'application/json'}, method='POST')
         try:
             urllib.request.urlopen(req, timeout=5)
             assert False, 'expected 400'
         except urllib.error.HTTPError as e:
             assert e.code == 400
+
+    req = urllib.request.Request(base + '/goal', data=json.dumps({'x': 1, 'y': 1}).encode(),
+                                  method='POST')  # no Content-Type header
+    try:
+        urllib.request.urlopen(req, timeout=5)
+        assert False, 'expected 400'
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+
     assert calls == [(1.5, -2.0)]   # bad requests never reached publish_goal
