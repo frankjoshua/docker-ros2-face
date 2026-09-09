@@ -116,6 +116,13 @@
   let gaze = [0, 0], gazeTarget = [0, 0];
   let mouth = 0, mouthTarget = 0, mouthAt = 0;
   let diagnostics = [];
+  let diagRenderTimer = null;
+  const DIAG_RENDER_INTERVAL_MS = 300; // caps re-render rate so a fast /diagnostics publisher doesn't flicker the HUD
+
+  function scheduleDiagRender() {
+    if (diagLayer.hidden || diagRenderTimer) return;
+    diagRenderTimer = setTimeout(() => { diagRenderTimer = null; renderDiagnostics(); }, DIAG_RENDER_INTERVAL_MS);
+  }
 
   function renderDiagnostics() {
     if (!diagnostics.length) {
@@ -149,7 +156,7 @@
     if (m.expression) svg.setAttribute('class', m.expression);
     if (m.gaze) gazeTarget = m.gaze;
     if (m.mouth !== undefined) { mouthTarget = m.mouth; mouthAt = performance.now(); }
-    if (m.diagnostics) { diagnostics = m.diagnostics; if (!diagLayer.hidden) renderDiagnostics(); }
+    if (m.diagnostics) { diagnostics = m.diagnostics; scheduleDiagRender(); }
   };
 
   let last = performance.now();
