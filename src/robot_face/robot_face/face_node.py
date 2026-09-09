@@ -18,6 +18,10 @@ class FaceState:
         self.values = {}     # key -> last value, replayed to new subscribers
         self.clients = []    # one queue.Queue per subscriber
         self.lock = threading.Lock()
+        # name -> latest status. Each /diagnostics publisher reports only its own
+        # components, so this accumulates a running list instead of replacing it.
+        # Mutated only from the single ROS callback thread, so no lock needed here.
+        self._diagnostics = {}
 
     def expression(self, name):
         if name not in EXPRESSIONS:
@@ -32,7 +36,9 @@ class FaceState:
         self._push('mouth', clamp(amplitude, 0.0, 1.0))
 
     def diagnostics(self, statuses):
-        self._push('diagnostics', statuses)
+        for status in statuses:
+            self._diagnostics[status['name']] = status
+        self._push('diagnostics', list(self._diagnostics.values()))
 
     def _push(self, key, value):
         with self.lock:
