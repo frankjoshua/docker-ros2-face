@@ -31,6 +31,9 @@ class FaceState:
     def mouth(self, amplitude):
         self._push('mouth', clamp(amplitude, 0.0, 1.0))
 
+    def diagnostics(self, statuses):
+        self._push('diagnostics', statuses)
+
     def _push(self, key, value):
         with self.lock:
             self.values[key] = value
@@ -91,8 +94,23 @@ def serve(state, port):
     return server.server_address[1]
 
 
+def diagnostic_array_to_json(msg):
+    """Convert a diagnostic_msgs/DiagnosticArray into plain JSON-able dicts."""
+    return [
+        {
+            'name': s.name,
+            'level': int(s.level[0]) if isinstance(s.level, (bytes, bytearray)) else int(s.level),
+            'message': s.message,
+            'hardware_id': s.hardware_id,
+            'values': [[kv.key, kv.value] for kv in s.values],
+        }
+        for s in msg.status
+    ]
+
+
 def main(args=None):
     import rclpy
+    from diagnostic_msgs.msg import DiagnosticArray
     from geometry_msgs.msg import Point
     from std_msgs.msg import Float32, String
 
@@ -110,6 +128,9 @@ def main(args=None):
     node.create_subscription(String, '/face/expression', on_expression, 10)
     node.create_subscription(Point, '/face/gaze', lambda m: state.gaze(m.x, m.y), 10)
     node.create_subscription(Float32, '/face/mouth', lambda m: state.mouth(m.data), 10)
+    node.create_subscription(
+        DiagnosticArray, '/diagnostics',
+        lambda m: state.diagnostics(diagnostic_array_to_json(m)), 10)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

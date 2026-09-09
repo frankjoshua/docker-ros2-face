@@ -21,6 +21,18 @@ def test_state_validates_and_keeps_last_value():
     assert s.values == {'expression': 'happy', 'gaze': [1.0, -1.0], 'mouth': 1.0}
 
 
+def test_state_diagnostics_passthrough():
+    s = FaceState()
+    s.diagnostics([
+        {'name': 'battery', 'level': 0, 'message': 'OK', 'hardware_id': 'bms',
+         'values': [['voltage', '12.1']]},
+    ])
+    assert s.values['diagnostics'] == [
+        {'name': 'battery', 'level': 0, 'message': 'OK', 'hardware_id': 'bms',
+         'values': [['voltage', '12.1']]},
+    ]
+
+
 def test_http_replay_live_index_404():
     state = FaceState()
     state.expression('happy')

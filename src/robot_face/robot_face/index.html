@@ -30,21 +30,74 @@
   .sleepy .eye       { transform: scaleY(.25); }
   .sleepy .brow      { transform: translateY(30px); }
   .sleepy .mouth     { transform: scaleX(.5); }
+
+  /* --- diagnostics HUD --- */
+  #diag-layer {
+    position: fixed; inset: 0; background: #000;
+    font-family: 'Courier New', ui-monospace, monospace;
+    color: #4ff; text-shadow: 0 0 6px rgba(68,255,255,.6);
+  }
+  #diag-layer[hidden] { display: none; }
+  .diag-corner { position: absolute; width: 44px; height: 44px; border: 3px solid #4ff;
+    box-shadow: 0 0 8px rgba(68,255,255,.6); opacity: .8; }
+  .diag-corner.tl { top: 16px; left: 16px; border-right: none; border-bottom: none; }
+  .diag-corner.tr { top: 16px; right: 16px; border-left: none; border-bottom: none; }
+  .diag-corner.bl { bottom: 16px; left: 16px; border-right: none; border-top: none; }
+  .diag-corner.br { bottom: 16px; right: 16px; border-left: none; border-top: none; }
+  .diag-scanline { position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #4ff, transparent);
+    opacity: .5; mix-blend-mode: screen; animation: scan 4s linear infinite; }
+  @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+  .diag-header { position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+    font-size: 28px; letter-spacing: 8px; }
+  #diag-back { position: absolute; top: 24px; left: 32px; background: transparent;
+    color: #4ff; border: 2px solid #4ff; font-family: inherit; font-size: 16px;
+    padding: 8px 16px; letter-spacing: 2px; cursor: pointer; }
+  #diag-back:active { background: rgba(68,255,255,.2); }
+  #diag-list { position: absolute; top: 90px; bottom: 60px; left: 60px; right: 60px;
+    overflow-y: auto; font-size: 18px; }
+  .diag-row { border-top: 1px solid rgba(68,255,255,.25); padding: 10px 0; }
+  .diag-row:first-child { border-top: none; }
+  .diag-name { display: inline-block; min-width: 3em; }
+  .diag-msg { opacity: .85; margin-left: 12px; }
+  .diag-hw { opacity: .5; margin-left: 12px; font-size: 14px; }
+  .diag-kvs { margin-left: 22px; opacity: .7; font-size: 14px; }
+  .diag-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    margin-right: 10px; vertical-align: middle; box-shadow: 0 0 6px currentColor; }
+  .level-0 .diag-dot { background: #3f6; color: #3f6; }
+  .level-1 .diag-dot { background: #fc3; color: #fc3; }
+  .level-2 .diag-dot { background: #f33; color: #f33; }
+  .level-3 .diag-dot { background: #888; color: #888; }
+  #diag-empty { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; letter-spacing: 4px; opacity: .5; }
 </style>
 
-<svg viewBox="0 0 1000 600" class="neutral">
-  <g id="brow-l" class="brow"><rect x="150" y="110" width="200" height="30" rx="15"/></g>
-  <g id="brow-r" class="brow"><rect x="650" y="110" width="200" height="30" rx="15"/></g>
-  <g class="eye"><g class="lid">
-    <rect class="sclera" x="150" y="170" width="200" height="220" rx="60"/>
-    <g class="pupil"><circle cx="250" cy="280" r="40"/></g>
-  </g></g>
-  <g class="eye"><g class="lid">
-    <rect class="sclera" x="650" y="170" width="200" height="220" rx="60"/>
-    <g class="pupil"><circle cx="750" cy="280" r="40"/></g>
-  </g></g>
-  <g class="mouth"><g id="mouth-open"><rect x="350" y="470" width="300" height="30" rx="15"/></g></g>
-</svg>
+<div id="face-layer">
+  <svg viewBox="0 0 1000 600" class="neutral">
+    <g id="brow-l" class="brow"><rect x="150" y="110" width="200" height="30" rx="15"/></g>
+    <g id="brow-r" class="brow"><rect x="650" y="110" width="200" height="30" rx="15"/></g>
+    <g class="eye"><g class="lid">
+      <rect class="sclera" x="150" y="170" width="200" height="220" rx="60"/>
+      <g class="pupil"><circle cx="250" cy="280" r="40"/></g>
+    </g></g>
+    <g class="eye"><g class="lid">
+      <rect class="sclera" x="650" y="170" width="200" height="220" rx="60"/>
+      <g class="pupil"><circle cx="750" cy="280" r="40"/></g>
+    </g></g>
+    <g class="mouth"><g id="mouth-open"><rect x="350" y="470" width="300" height="30" rx="15"/></g></g>
+  </svg>
+</div>
+
+<div id="diag-layer" hidden>
+  <div class="diag-corner tl"></div>
+  <div class="diag-corner tr"></div>
+  <div class="diag-corner bl"></div>
+  <div class="diag-corner br"></div>
+  <div class="diag-scanline"></div>
+  <div class="diag-header">DIAGNOSTICS</div>
+  <button id="diag-back">&larr; BACK</button>
+  <div id="diag-list"></div>
+</div>
 
 <script>
   const GAZE_SPEED = 3;         // gaze units per second; full sweep (-1..1) takes 2/GAZE_SPEED s
@@ -56,9 +109,39 @@
   const pupils = document.querySelectorAll('.pupil');
   const lids = document.querySelectorAll('.lid');
   const mouthOpen = document.getElementById('mouth-open');
+  const faceLayer = document.getElementById('face-layer');
+  const diagLayer = document.getElementById('diag-layer');
+  const diagList = document.getElementById('diag-list');
 
   let gaze = [0, 0], gazeTarget = [0, 0];
   let mouth = 0, mouthTarget = 0, mouthAt = 0;
+  let diagnostics = [];
+
+  function renderDiagnostics() {
+    if (!diagnostics.length) {
+      diagList.innerHTML = '<div id="diag-empty">NO DIAGNOSTICS DATA</div>';
+      return;
+    }
+    diagList.innerHTML = diagnostics.map(s => `
+      <div class="diag-row level-${s.level}">
+        <span class="diag-dot"></span>
+        <span class="diag-name">${s.name}</span>
+        <span class="diag-msg">${s.message}</span>
+        ${s.hardware_id ? `<span class="diag-hw">[${s.hardware_id}]</span>` : ''}
+        ${s.values.map(([k, v]) => `<div class="diag-kvs">${k}: ${v}</div>`).join('')}
+      </div>`).join('');
+  }
+
+  faceLayer.addEventListener('click', () => {
+    faceLayer.hidden = true;
+    diagLayer.hidden = false;
+    renderDiagnostics();
+  });
+  document.getElementById('diag-back').addEventListener('click', (e) => {
+    e.stopPropagation();
+    diagLayer.hidden = true;
+    faceLayer.hidden = false;
+  });
 
   const es = new EventSource('/events');
   es.onmessage = e => {
@@ -66,6 +149,7 @@
     if (m.expression) svg.setAttribute('class', m.expression);
     if (m.gaze) gazeTarget = m.gaze;
     if (m.mouth !== undefined) { mouthTarget = m.mouth; mouthAt = performance.now(); }
+    if (m.diagnostics) { diagnostics = m.diagnostics; if (!diagLayer.hidden) renderDiagnostics(); }
   };
 
   let last = performance.now();
