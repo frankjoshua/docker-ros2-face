@@ -1,8 +1,10 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>face</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  #diag-layer, #map-layer { cursor: default; }
   svg { width: 100vw; height: 100vh; display: block; }
   g { transform-box: fill-box; transform-origin: center; }
   .eye, .brow, .mouth { transition: transform .2s ease; }
@@ -157,14 +159,23 @@
       diagList.innerHTML = '<div id="diag-empty">NO DIAGNOSTICS DATA</div>';
       return;
     }
-    diagList.innerHTML = diagnostics.map(s => `
-      <div class="diag-row level-${s.level}">
-        <span class="diag-dot"></span>
-        <span class="diag-name">${s.name}</span>
-        <span class="diag-msg">${s.message}</span>
-        ${s.hardware_id ? `<span class="diag-hw">[${s.hardware_id}]</span>` : ''}
-        ${s.values.map(([k, v]) => `<div class="diag-kvs">${k}: ${v}</div>`).join('')}
-      </div>`).join('');
+    const rows = diagnostics.map(s => {
+      const row = document.createElement('div');
+      row.className = `diag-row level-${s.level}`;
+      function add(tag, className, text) {
+        const element = document.createElement(tag);
+        element.className = className;
+        element.textContent = text;
+        row.appendChild(element);
+      }
+      add('span', 'diag-dot', '');
+      add('span', 'diag-name', s.name);
+      add('span', 'diag-msg', s.message);
+      if (s.hardware_id) add('span', 'diag-hw', `[${s.hardware_id}]`);
+      s.values.forEach(([k, v]) => add('div', 'diag-kvs', `${k}: ${v}`));
+      return row;
+    });
+    diagList.replaceChildren(...rows);
   }
 
   let mapInfo = null;    // {resolution, width, height, origin} of the last-rendered map
@@ -207,12 +218,12 @@
     const col = (x - mapInfo.origin[0]) / mapInfo.resolution;
     const row = (y - mapInfo.origin[1]) / mapInfo.resolution;
     return [mapDraw.offsetX + col * mapDraw.scale,
-            mapDraw.offsetY + (mapInfo.height - 1 - row) * mapDraw.scale];
+            mapDraw.offsetY + (mapInfo.height - row) * mapDraw.scale];
   }
 
   function canvasToMap(px, py) {
     const col = (px - mapDraw.offsetX) / mapDraw.scale;
-    const row = mapInfo.height - 1 - (py - mapDraw.offsetY) / mapDraw.scale;
+    const row = mapInfo.height - (py - mapDraw.offsetY) / mapDraw.scale;
     return [mapInfo.origin[0] + col * mapInfo.resolution, mapInfo.origin[1] + row * mapInfo.resolution];
   }
 
@@ -252,9 +263,18 @@
   mapCanvas.addEventListener('click', (e) => {
     if (!mapInfo || !mapDraw) return;
     const rect = mapCanvas.getBoundingClientRect();
-    const [x, y] = canvasToMap(e.clientX - rect.left, e.clientY - rect.top);
+    const px = (e.clientX - rect.left) * mapCanvas.width / rect.width;
+    const py = (e.clientY - rect.top) * mapCanvas.height / rect.height;
+    if (px < mapDraw.offsetX || py < mapDraw.offsetY ||
+        px >= mapDraw.offsetX + mapInfo.width * mapDraw.scale ||
+        py >= mapDraw.offsetY + mapInfo.height * mapDraw.scale) return;
+    const [x, y] = canvasToMap(px, py);
     fetch('/goal', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ x, y }) });
+  });
+
+  window.addEventListener('resize', () => {
+    if (!mapLayer.hidden) drawMap();
   });
 
   diagMapBtn.addEventListener('click', (e) => {
@@ -268,6 +288,7 @@
     e.stopPropagation();
     mapLayer.hidden = true;
     diagLayer.hidden = false;
+    renderDiagnostics();
   });
 
   faceLayer.addEventListener('click', () => {

@@ -72,7 +72,10 @@ expected there.
 ## Face
 
 `face_node` serves the face at `http://<robot>:8080/` and streams updates over Server-Sent Events.
-Point any kiosk browser at it (`chromium --kiosk http://localhost:8080/`). Nothing is published.
+Point any kiosk browser at it (`chromium --kiosk http://localhost:8080/`). Tap the face to open
+diagnostics, then **MAP** to view `/map` and the robot's TF pose. Tapping inside the map publishes
+a `geometry_msgs/PoseStamped` navigation goal; taps in the surrounding margins are ignored.
+Map origins are currently assumed to have zero yaw.
 
 | Topic              | Type                  | Meaning |
 |--------------------|-----------------------|---------|
@@ -88,10 +91,24 @@ ros2 topic pub -1 /face/gaze geometry_msgs/Point "{x: 0.8, y: 0.2}"
 ros2 topic pub -r 20 /face/mouth std_msgs/Float32 "{data: 0.7}"
 ```
 
-Parameter: `port` (default 8080). Gaze slew speed is `GAZE_SPEED` at the top of the script in
+Parameters: `port` (default 8080), `map_frame` (`map`), `base_frame` (`base_link`), and
+`goal_topic` (`goal_pose`). Gaze slew speed is `GAZE_SPEED` at the top of the script in
 `src/robot_face/robot_face/index.html`.
 
 Test: `colcon test --packages-select robot_face --event-handlers console_direct+`
+
+The Python/HTTP tests also run without ROS. To include the Chromium browser regressions:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-test.txt
+python -m playwright install chromium
+PYTHONPATH=src/robot_face python -m pytest -q src/robot_face/test
+```
+
+Set `CHROMIUM_EXECUTABLE=/path/to/chromium` to use an existing browser. Browser tests are skipped
+when Playwright is not installed. CI installs it and runs the complete suite before building.
 
 ## Multiple nodes & local-network discovery
 
@@ -131,13 +148,13 @@ docker run -it --net=host --ipc=host --pid=host frankjoshua/ros2-face
 (unicast like ssh still works, so the robot seems reachable yet `ros2 topic list` shows nothing).
 The fix, no changes on the robot:
 
-1. In [`.devcontainer/fastdds_profiles.xml`](.devcontainer/fastdds_profiles.xml), uncomment the
-   `initialPeersList` block and set your robot's IP. A VPN IP (e.g. the robot's Tailscale
+1. In [`.devcontainer/fastdds_profiles.xml`](.devcontainer/fastdds_profiles.xml), set your robot's IP
+   in `initialPeersList` (currently `192.168.2.50` for `tx2.local`). A VPN IP (e.g. the robot's Tailscale
    address) works too and keeps discovery alive off-LAN. Discovery then runs over unicast.
 2. If the robot runs many nodes/containers, raise `maxInitialPeersRange` (the file defaults
    to 64) — too low and only the robot's first few nodes are discovered.
-3. Rebuild the container (`devcontainer up --workspace-folder . --remove-existing-container`),
-   then run `ros2 daemon stop` before checking `ros2 topic list`.
+3. Restart the face node to reload the profile, then run `ros2 daemon stop` before checking
+   `ros2 topic list`. The profile is bind-mounted, so editing it does not require rebuilding.
 
 **The daemon will lie to you.** `ros2 topic list` asks a long-running daemon, and with
 `--net=host` *all* containers on the machine share the single daemon — whichever shell spawned it
@@ -164,7 +181,8 @@ Multi-arch build and push to Docker Hub:
 ```
 
 GitHub Actions publishes on every push to `main` (see `.github/workflows/ci.yml`). It expects the
-`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets. Pull requests run tests and build
+the image without logging into Docker Hub or publishing.
 
 Run the published image (host networking is needed because ROS 2 DDS uses ephemeral ports;
 `--ipc=host` enables shared-memory transport between containers; `--pid=host` keeps DDS GUIDs unique):

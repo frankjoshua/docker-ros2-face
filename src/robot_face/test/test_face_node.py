@@ -1,8 +1,15 @@
 import json
+import http.client
+import socket
+import struct
+import time
 import urllib.error
 import urllib.request
 
-from robot_face.face_node import FaceState, serve
+import pytest
+
+from robot_face import face_node
+from robot_face.face_node import FaceState
 
 
 def read_event(resp):
@@ -36,16 +43,17 @@ def test_state_diagnostics_merges_by_name():
     assert s.values['diagnostics'][0]['message'] == 'low'
 
 
-def test_http_replay_live_index_404():
+def test_http_replay_live_index_404(http_server):
     state = FaceState()
     state.expression('happy')
-    base = f'http://127.0.0.1:{serve(state, 0, lambda x, y: None)}'
+    base = http_server(state)
 
     events = urllib.request.urlopen(f'{base}/events', timeout=5)
     assert events.headers['Content-Type'] == 'text/event-stream'
     assert read_event(events) == {'expression': 'happy'}   # replayed on connect
     state.gaze(0.5, 0.0)
     assert read_event(events) == {'gaze': [0.5, 0.0]}       # live
+    events.close()
 
     index = urllib.request.urlopen(f'{base}/', timeout=5)
     assert index.status == 200
@@ -76,10 +84,10 @@ def test_state_pose_passthrough():
     assert s.values['pose'] == [1.5, -2.0, 0.78]
 
 
-def test_post_goal_calls_publish_and_validates():
+def test_post_goal_calls_publish_and_validates(http_server):
     calls = []
     state = FaceState()
-    base = f'http://127.0.0.1:{serve(state, 0, lambda x, y: calls.append((x, y)))}'
+    base = http_server(state, lambda x, y: calls.append((x, y)))
 
     req = urllib.request.Request(
         base + '/goal', data=json.dumps({'x': 1.5, 'y': -2.0}).encode(),
@@ -108,3 +116,82 @@ def test_post_goal_calls_publish_and_validates():
         assert e.code == 400
 
     assert calls == [(1.5, -2.0)]   # bad requests never reached publish_goal
+
+
+@pytest.mark.parametrize('headers, body, status', [
+    ({'Content-Length': 'oops'}, b'', 400),
+    ({'Content-Length': '-1'}, b'', 400),
+    ({'Content-Length': '10000000'}, b'', 413),
+    ({'Transfer-Encoding': 'chunked'}, b'{"x": 1, "y": 2}', 400),
+    ({'Content-Type': 'application/json-invalid'}, b'{"x": 1, "y": 2}', 400),
+    ({}, b'{"x": true, "y": 2}', 400),
+    ({}, b'{"x": ' + b'9' * 400 + b', "y": 2}', 400),
+    ({}, b'[]', 400),
+    ({}, b'null', 400),
+])
+def test_goal_rejects_invalid_requests(http_server, headers, body, status):
+    calls = []
+    base = http_server(FaceState(), lambda x, y: calls.append((x, y)))
+    conn = http.client.HTTPConnection(base.removeprefix('http://'), timeout=1)
+    try:
+        conn.request('POST', '/goal', body,
+                     {'Content-Type': 'application/json', **headers})
+        assert conn.getresponse().status == status
+        assert calls == []
+    finally:
+        conn.close()
+
+
+def test_goal_body_read_times_out(http_server, monkeypatch):
+    monkeypatch.setattr(face_node, 'SOCKET_TIMEOUT_SECONDS', 0.05)
+    calls = []
+    base = http_server(FaceState(), lambda x, y: calls.append((x, y)))
+    conn = http.client.HTTPConnection(base.removeprefix('http://'), timeout=1)
+    try:
+        conn.request('POST', '/goal', b'{',
+                     {'Content-Type': 'application/json', 'Content-Length': '20'})
+        assert conn.getresponse().status == 408
+        assert calls == []
+    finally:
+        conn.close()
+
+
+def test_slow_subscriber_keeps_latest_state_without_unbounded_backlog():
+    state = FaceState()
+    slow = state.subscribe()
+    fast = state.subscribe()
+    state.expression('happy')
+    state.map(1, 1, 1, [0, 0], 'AA==')
+    for i in range(10000):
+        state.pose(i, -i, 0)
+        while not fast.empty():
+            fast.get_nowait()
+    assert slow.qsize() < 100
+    latest = {}
+    while not slow.empty():
+        key, value = slow.get_nowait()
+        latest[key] = value
+    assert latest == state.values
+
+
+def test_idle_event_stream_heartbeats_and_reaps_disconnected_client(http_server, monkeypatch):
+    monkeypatch.setattr(face_node, 'HEARTBEAT_SECONDS', 0.05, raising=False)
+    state = FaceState()
+    base = http_server(state)
+    conn = http.client.HTTPConnection(base.removeprefix('http://'), timeout=1)
+    conn.request('GET', '/events')
+    # Keep the socket: HTTP/1.0 transfers its ownership to the response.
+    sock = conn.sock
+    response = conn.getresponse()
+    try:
+        assert response.readline().startswith(b':')
+        assert response.readline() == b'\n'
+        # Reset the TCP connection so the server observes an idle disconnect.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+    finally:
+        response.close()
+        conn.close()
+    deadline = time.monotonic() + 2
+    while state.clients and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert not state.clients

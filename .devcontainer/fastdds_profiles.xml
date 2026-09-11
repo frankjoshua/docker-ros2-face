@@ -4,9 +4,10 @@
 
   Wi-Fi networks commonly drop the multicast packets DDS discovery relies on, so a
   robot on the same LAN stays invisible even though unicast (ssh, ping) works. The
-  fix that needs no changes on the robot: announce directly to its IP. Uncomment
-  the initialPeersList below, set your robot's address, and rebuild the container
-  (or export FASTRTPS_DEFAULT_PROFILES_FILE in a shell and restart the ros2 daemon).
+  fix that needs no changes on the robot: announce directly to its IP. The
+  initialPeersList below targets tx2.local at 192.168.2.50. Set your robot's address
+  and restart the ROS processes and ros2 daemon to reload it. Outside the
+  devcontainer, also export FASTRTPS_DEFAULT_PROFILES_FILE to this file's path.
   A VPN address (e.g. the robot's Tailscale IP) works too and survives leaving the LAN.
 
   maxInitialPeersRange is how many participant ports are probed per peer; a robot
@@ -29,7 +30,7 @@
                 <transport_id>udp_unicast_peers</transport_id>
             </userTransports>
             <useBuiltinTransports>false</useBuiltinTransports>
-            <!-- Uncomment and set your robot's IP if `ros2 topic list` can't see it:
+            <!-- Direct discovery of tx2.local over the local Wi-Fi network. -->
             <builtin>
                 <initialPeersList>
                     <locator>
@@ -39,7 +40,6 @@
                     </locator>
                 </initialPeersList>
             </builtin>
-            -->
         </rtps>
     </participant>
 </profiles>

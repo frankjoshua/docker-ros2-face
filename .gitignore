@@ -4,4 +4,6 @@ install/
 log/
 .serena/
 __pycache__/
+.pytest_cache/
+.venv/
 .devcontainer/devcontainer-lock.json

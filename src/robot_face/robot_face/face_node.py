@@ -7,6 +7,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 
 EXPRESSIONS = {'neutral', 'happy', 'sad', 'surprised', 'angry', 'sleepy'}
+CLIENT_QUEUE_SIZE = 64
+HEARTBEAT_SECONDS = 15
+SOCKET_TIMEOUT_SECONDS = 10
+MAX_GOAL_BYTES = 4096
 
 
 def clamp(v, lo, hi):
@@ -66,10 +70,21 @@ class FaceState:
         with self.lock:
             self.values[key] = value
             for q in self.clients:
-                q.put((key, value))
+                try:
+                    q.put_nowait((key, value))
+                except queue.Full:
+                    # A stalled browser needs current state, not an ever-growing
+                    # history. Replay every key so infrequent updates survive too.
+                    while True:
+                        try:
+                            q.get_nowait()
+                        except queue.Empty:
+                            break
+                    for item in self.values.items():
+                        q.put_nowait(item)
 
     def subscribe(self):
-        q = queue.Queue()
+        q = queue.Queue(maxsize=CLIENT_QUEUE_SIZE)
         with self.lock:
             for item in self.values.items():
                 q.put(item)
@@ -83,6 +98,10 @@ class FaceState:
 
 def make_handler(state, publish_goal):
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(SOCKET_TIMEOUT_SECONDS)
+
         def log_message(self, *args):
             pass
 
@@ -99,11 +118,13 @@ def make_handler(state, publish_goal):
                 self.end_headers()
                 q = state.subscribe()
                 try:
-                    # ponytail: a client that disconnects while idle is only reaped
-                    # on the next event's failed write; add a heartbeat if that leaks.
                     while True:
-                        key, value = q.get()
-                        self.wfile.write(f'data: {json.dumps({key: value})}\n\n'.encode())
+                        try:
+                            key, value = q.get(timeout=HEARTBEAT_SECONDS)
+                            event = f'data: {json.dumps({key: value})}\n\n'.encode()
+                        except queue.Empty:
+                            event = b': heartbeat\n\n'
+                        self.wfile.write(event)
                         self.wfile.flush()
                 except OSError:
                     pass
@@ -116,16 +137,30 @@ def make_handler(state, publish_goal):
             if self.path != '/goal':
                 self.send_error(404)
                 return
-            if not self.headers.get('Content-Type', '').startswith('application/json'):
+            if (self.headers.get_content_type() != 'application/json'
+                    or self.headers.get('Transfer-Encoding') is not None):
                 self.send_error(400)
                 return
-            length = int(self.headers.get('Content-Length', 0))
             try:
+                lengths = self.headers.get_all('Content-Length', [])
+                if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdigit():
+                    raise ValueError('invalid content length')
+                length = int(lengths[0])
+                if length <= 0:
+                    raise ValueError('empty body')
+                if length > MAX_GOAL_BYTES:
+                    self.send_error(413)
+                    return
                 body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict) or any(isinstance(body[k], bool) for k in ('x', 'y')):
+                    raise ValueError('expected coordinates')
                 x, y = float(body['x']), float(body['y'])
                 if not (math.isfinite(x) and math.isfinite(y)):
                     raise ValueError('non-finite coordinate')
-            except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            except TimeoutError:
+                self.send_error(408)
+                return
+            except (ValueError, KeyError, TypeError, OverflowError, RecursionError):
                 self.send_error(400)
                 return
             publish_goal(x, y)
