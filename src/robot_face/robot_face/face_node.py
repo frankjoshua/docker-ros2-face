@@ -66,6 +66,12 @@ class FaceState:
     def pose(self, x, y, theta):
         self._push('pose', [x, y, theta])
 
+    def goal(self, x, y):
+        self._push('goal', [x, y])
+
+    def path(self, points):
+        self._push('path', points)
+
     def _push(self, key, value):
         with self.lock:
             self.values[key] = value
@@ -164,6 +170,7 @@ def make_handler(state, publish_goal):
                 self.send_error(400)
                 return
             publish_goal(x, y)
+            state.goal(x, y)
             self.send_response(204)
             self.end_headers()
 
@@ -193,12 +200,39 @@ def diagnostic_array_to_json(msg):
     ]
 
 
+def navigation_points_to_map(poses, default_frame, map_frame, lookup_transform):
+    """Convert stamped positions to map XY, looking up each source frame once."""
+    transforms = {}
+    points = []
+    for pose in poses:
+        frame = pose.header.frame_id or default_frame
+        if not frame:
+            raise ValueError('navigation message has no coordinate frame')
+        p = pose.pose.position
+        x, y = p.x, p.y
+        if frame != map_frame:
+            if frame not in transforms:
+                transforms[frame] = lookup_transform(map_frame, frame).transform
+            t = transforms[frame]
+            q = t.rotation
+            x = ((1 - 2 * (q.y*q.y + q.z*q.z)) * p.x
+                 + 2 * (q.x*q.y - q.z*q.w) * p.y
+                 + 2 * (q.x*q.z + q.y*q.w) * p.z + t.translation.x)
+            y = (2 * (q.x*q.y + q.z*q.w) * p.x
+                 + (1 - 2 * (q.x*q.x + q.z*q.z)) * p.y
+                 + 2 * (q.y*q.z - q.x*q.w) * p.z + t.translation.y)
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ValueError('navigation message has non-finite coordinates')
+        points.append([x, y])
+    return points
+
+
 def main(args=None):
     import rclpy
     import tf2_ros
     from diagnostic_msgs.msg import DiagnosticArray
     from geometry_msgs.msg import Point, PoseStamped, Quaternion
-    from nav_msgs.msg import OccupancyGrid
+    from nav_msgs.msg import OccupancyGrid, Path
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
     from std_msgs.msg import Float32, String
 
@@ -208,6 +242,7 @@ def main(args=None):
     node.declare_parameter('map_frame', 'map')
     node.declare_parameter('base_frame', 'base_link')
     node.declare_parameter('goal_topic', 'goal_pose')
+    node.declare_parameter('path_topic', 'plan')
     map_frame = node.get_parameter('map_frame').value
     base_frame = node.get_parameter('base_frame').value
 
@@ -253,6 +288,27 @@ def main(args=None):
 
     tf_buffer = tf2_ros.Buffer()
     tf2_ros.TransformListener(tf_buffer, node)
+
+    def map_points(poses, frame):
+        return navigation_points_to_map(
+            poses, frame, map_frame,
+            lambda target, source: tf_buffer.lookup_transform(target, source, rclpy.time.Time()))
+
+    def on_goal(msg):
+        try:
+            state.goal(*map_points([msg], msg.header.frame_id)[0])
+        except (tf2_ros.TransformException, ValueError) as exc:
+            node.get_logger().warning(f'Cannot display goal: {exc}')
+
+    def on_path(msg):
+        try:
+            state.path(map_points(msg.poses, msg.header.frame_id))
+        except (tf2_ros.TransformException, ValueError) as exc:
+            state.path([])
+            node.get_logger().warning(f'Cannot display path: {exc}')
+
+    node.create_subscription(PoseStamped, node.get_parameter('goal_topic').value, on_goal, 10)
+    node.create_subscription(Path, node.get_parameter('path_topic').value, on_path, 10)
 
     def on_pose_timer():
         nonlocal has_pose

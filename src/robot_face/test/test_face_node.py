@@ -3,6 +3,7 @@ import http.client
 import socket
 import struct
 import time
+from types import SimpleNamespace
 import urllib.error
 import urllib.request
 
@@ -95,6 +96,7 @@ def test_post_goal_calls_publish_and_validates(http_server):
     resp = urllib.request.urlopen(req, timeout=5)
     assert resp.status == 204
     assert calls == [(1.5, -2.0)]
+    assert state.values['goal'] == [1.5, -2.0]
 
     for bad_body in (b'not json', b'{"x": 1.5}', b'{"x": "nope", "y": 1}',
                      b'{"x": NaN, "y": 1}', b'{"x": Infinity, "y": 1}'):
@@ -116,6 +118,49 @@ def test_post_goal_calls_publish_and_validates(http_server):
         assert e.code == 400
 
     assert calls == [(1.5, -2.0)]   # bad requests never reached publish_goal
+    assert state.values['goal'] == [1.5, -2.0]
+
+
+def test_navigation_overlays_replay_and_empty_path_clears(http_server):
+    state = FaceState()
+    state.goal(3, 4)
+    state.path([[1, 2], [3, 4]])
+    with urllib.request.urlopen(http_server(state) + '/events', timeout=5) as events:
+        assert read_event(events) == {'goal': [3, 4]}
+        assert read_event(events) == {'path': [[1, 2], [3, 4]]}
+        state.path([])
+        assert read_event(events) == {'path': []}
+
+
+def stamped_position(x, y, frame=''):
+    return SimpleNamespace(header=SimpleNamespace(frame_id=frame),
+                           pose=SimpleNamespace(position=SimpleNamespace(x=x, y=y, z=0)))
+
+
+def test_navigation_points_transform_and_respect_pose_frames():
+    calls = []
+
+    def lookup(target, source):
+        calls.append((target, source))
+        # 90 degree rotation followed by translation.
+        return SimpleNamespace(transform=SimpleNamespace(
+            rotation=SimpleNamespace(x=0, y=0, z=2**-0.5, w=2**-0.5),
+            translation=SimpleNamespace(x=10, y=20, z=0)))
+
+    points = face_node.navigation_points_to_map(
+        [stamped_position(1, 2), stamped_position(2, 3), stamped_position(4, 5, 'map')],
+        'odom', 'map', lookup)
+    assert points[0] == pytest.approx([8, 21])
+    assert points[1] == pytest.approx([7, 22])
+    assert points[2] == [4, 5]
+    assert calls == [('map', 'odom')]
+
+
+@pytest.mark.parametrize('pose', [stamped_position(1, 2),
+                                  stamped_position(float('nan'), 2, 'map')])
+def test_navigation_points_reject_missing_frame_or_invalid_coordinates(pose):
+    with pytest.raises(ValueError):
+        face_node.navigation_points_to_map([pose], '', 'map', None)
 
 
 @pytest.mark.parametrize('headers, body, status', [

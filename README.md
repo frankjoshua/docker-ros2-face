@@ -76,6 +76,11 @@ Point any kiosk browser at it (`chromium --kiosk http://localhost:8080/`). Tap t
 diagnostics, then **MAP** to view `/map` and the robot's TF pose. Tapping inside the map publishes
 a `geometry_msgs/PoseStamped` navigation goal; taps in the surrounding margins are ignored.
 Map origins are currently assumed to have zero yaw.
+The robot is a magenta heading arrow, the latest goal is a yellow target, and the planned
+path is green. Goals from map taps and the `goal_topic` subscription are shared with all
+browsers. The path comes from `nav_msgs/Path` on `path_topic`; an empty path clears the line.
+Goals and paths in other coordinate frames are transformed into `map_frame` using TF.
+The display retains the latest goal and path; it does not track navigation completion.
 
 | Topic              | Type                  | Meaning |
 |--------------------|-----------------------|---------|
@@ -92,7 +97,8 @@ ros2 topic pub -r 20 /face/mouth std_msgs/Float32 "{data: 0.7}"
 ```
 
 Parameters: `port` (default 8080), `map_frame` (`map`), `base_frame` (`base_link`), and
-`goal_topic` (`goal_pose`). Gaze slew speed is `GAZE_SPEED` at the top of the script in
+`goal_topic` (`goal_pose`), and `path_topic` (`plan`). For a different planner topic, pass
+`--ros-args -p path_topic:=/your/path/topic`. Gaze slew speed is `GAZE_SPEED` at the top of the script in
 `src/robot_face/robot_face/index.html`.
 
 Test: `colcon test --packages-select robot_face --event-handlers console_direct+`

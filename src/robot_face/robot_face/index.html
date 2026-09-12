@@ -33,45 +33,68 @@
   .sleepy .brow      { transform: translateY(30px); }
   .sleepy .mouth     { transform: scaleX(.5); }
 
-  /* --- diagnostics HUD --- */
+  /* --- diagnostics --- */
   #diag-layer {
-    position: fixed; inset: 0; background: #000;
-    font-family: 'Courier New', ui-monospace, monospace;
-    color: #4ff; text-shadow: 0 0 6px rgba(68,255,255,.6);
+    position: fixed; inset: 0; background: #14171c; color: #e8ebef;
+    font-family: system-ui, sans-serif; padding: 28px; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 20px;
   }
   #diag-layer[hidden] { display: none; }
-  .diag-corner { position: absolute; width: 44px; height: 44px; border: 3px solid #4ff;
-    box-shadow: 0 0 8px rgba(68,255,255,.6); opacity: .8; }
-  .diag-corner.tl { top: 16px; left: 16px; border-right: none; border-bottom: none; }
-  .diag-corner.tr { top: 16px; right: 16px; border-left: none; border-bottom: none; }
-  .diag-corner.bl { bottom: 16px; left: 16px; border-right: none; border-top: none; }
-  .diag-corner.br { bottom: 16px; right: 16px; border-left: none; border-top: none; }
-  .diag-scanline { position: absolute; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, transparent, #4ff, transparent);
-    opacity: .5; mix-blend-mode: screen; animation: scan 4s linear infinite; }
-  @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-  .diag-header { position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
-    font-size: 28px; letter-spacing: 8px; }
-  #diag-back { position: absolute; top: 24px; left: 32px; background: transparent;
-    color: #4ff; border: 2px solid #4ff; font-family: inherit; font-size: 16px;
-    padding: 8px 16px; letter-spacing: 2px; cursor: pointer; }
-  #diag-back:active { background: rgba(68,255,255,.2); }
-  #diag-list { position: absolute; top: 90px; bottom: 60px; left: 60px; right: 60px;
-    overflow-y: auto; font-size: 18px; }
-  .diag-row { border-top: 1px solid rgba(68,255,255,.25); padding: 10px 0; }
-  .diag-row:first-child { border-top: none; }
-  .diag-name { display: inline-block; min-width: 3em; }
-  .diag-msg { opacity: .85; margin-left: 12px; }
-  .diag-hw { opacity: .5; margin-left: 12px; font-size: 14px; }
-  .diag-kvs { margin-left: 22px; opacity: .7; font-size: 14px; }
-  .diag-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
-    margin-right: 10px; vertical-align: middle; box-shadow: 0 0 6px currentColor; }
-  .level-0 .diag-dot { background: #3f6; color: #3f6; }
-  .level-1 .diag-dot { background: #fc3; color: #fc3; }
-  .level-2 .diag-dot { background: #f33; color: #f33; }
-  .level-3 .diag-dot { background: #888; color: #888; }
-  #diag-empty { position: absolute; inset: 0; display: flex; align-items: center;
-    justify-content: center; font-size: 20px; letter-spacing: 4px; opacity: .5; }
+  .diag-toolbar { display: flex; align-items: center; gap: 16px; }
+  .diag-heading { flex: 1; min-width: 0; }
+  .diag-header { margin: 0; font-size: 25.2px; font-weight: 600; letter-spacing: -.5px; }
+  .diag-hint { margin: 4px 0 0; font-size: 12.6px; color: #9ba5b3; }
+  .nav-button { min-height: 44px; padding: 10px 16px; border: 1px solid #3c4552;
+    border-radius: 8px; background: #242a33; color: #e8ebef;
+    font: 500 14.4px system-ui, sans-serif; cursor: pointer; touch-action: manipulation; }
+  .nav-button:hover { background: #303844; }
+  .nav-button:active { background: #3c4756; }
+  .nav-button:focus-visible, .diag-row summary:focus-visible {
+    outline: 2px solid #9bbcf4; outline-offset: 3px;
+  }
+  #diag-map-btn { background: #a9c5ef; border-color: #a9c5ef; color: #182437; }
+  #diag-map-btn:hover { background: #c1d6f5; }
+  #diag-map-btn:active { background: #8eadde; }
+  #diag-list { flex: 1; min-height: 0; overflow-y: auto; font-size: 16.2px; padding: 4px;
+    scrollbar-color: #485260 transparent; }
+  .diag-row { margin-bottom: 8px; border: 1px solid #303741; border-radius: 10px;
+    background: #1d222a; overflow: hidden; }
+  .diag-row summary { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 12px;
+    align-items: center; gap: 12px; min-height: 48px; padding: 12px 16px;
+    cursor: pointer; list-style: none; touch-action: manipulation; }
+  .diag-row summary::-webkit-details-marker { display: none; }
+  .diag-row summary:hover { background: #252c36; }
+  .diag-row summary::after { content: ''; width: 6px; height: 6px;
+    border-right: 1.5px solid #9ba5b3; border-bottom: 1.5px solid #9ba5b3;
+    transform: rotate(-45deg); }
+  .diag-row[open] summary::after { transform: rotate(45deg); }
+  .diag-name { display: block; font-weight: 550; overflow-wrap: anywhere; }
+  .diag-msg { display: block; margin-top: 3px; color: #acb5c2; font-size: 16.2px;
+    overflow-wrap: anywhere; }
+  .diag-dot { width: 8px; height: 8px; border-radius: 50%; background: #929dab; }
+  .diag-level { font-size: 12.6px; color: #acb5c2; }
+  .level-0 .diag-dot { background: #7dcba4; }
+  .level-0 .diag-level { color: #7dcba4; }
+  .level-1 .diag-dot { background: #e4bd72; }
+  .level-1 .diag-level { color: #e4bd72; }
+  .level-2 .diag-dot { background: #ef9292; }
+  .level-2 .diag-level { color: #ef9292; }
+  .diag-body { padding: 14px 16px 16px 36px; border-top: 1px solid #303741;
+    font-size: 12.6px; color: #acb5c2; overflow-wrap: anywhere; }
+  .diag-hw { margin-bottom: 10px; }
+  .diag-kvs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 8px 20px; margin: 0; }
+  .diag-kvs dt { color: #9ba5b3; }
+  .diag-kvs dd { margin: 0; color: #e8ebef; white-space: pre-wrap; }
+  #diag-empty { padding: 60px 16px; text-align: center; font-size: 18px; color: #9ba5b3; }
+  @media (max-width: 520px) {
+    #diag-layer { padding: 16px; gap: 12px; }
+    .diag-toolbar { flex-wrap: wrap; gap: 10px; }
+    .diag-heading { order: -1; flex-basis: 100%; }
+    #diag-map-btn { margin-left: auto; }
+    .diag-row summary { padding: 12px; gap: 10px; }
+    .diag-body { padding-left: 30px; }
+  }
 
   /* --- map mode --- */
   #map-layer { position: fixed; inset: 0; background: #000; }
@@ -81,12 +104,13 @@
     justify-content: center; font-size: 20px; letter-spacing: 4px; opacity: .5;
     font-family: 'Courier New', ui-monospace, monospace; color: #4ff; }
   #map-empty[hidden] { display: none; }
-  #map-back, #diag-map-btn { position: absolute; top: 24px; background: transparent;
-    color: #4ff; border: 2px solid #4ff; font-family: 'Courier New', ui-monospace, monospace;
-    font-size: 16px; padding: 8px 16px; letter-spacing: 2px; cursor: pointer; z-index: 1; }
-  #map-back:active, #diag-map-btn:active { background: rgba(68,255,255,.2); }
-  #map-back { left: 32px; }
-  #diag-map-btn { right: 32px; }
+  #map-back { position: absolute; top: 24px; left: 32px; z-index: 1; }
+  #map-legend { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px; padding: 8px 12px; background: rgba(0,0,0,.8);
+    font: 14px 'Courier New', ui-monospace, monospace; pointer-events: none; }
+  #map-legend .robot { color: #f0f; }
+  #map-legend .goal { color: #fc3; }
+  #map-legend .path { color: #3f6; }
 </style>
 
 <div id="face-layer">
@@ -106,21 +130,22 @@
 </div>
 
 <div id="diag-layer" hidden>
-  <div class="diag-corner tl"></div>
-  <div class="diag-corner tr"></div>
-  <div class="diag-corner bl"></div>
-  <div class="diag-corner br"></div>
-  <div class="diag-scanline"></div>
-  <div class="diag-header">DIAGNOSTICS</div>
-  <button id="diag-back">&larr; FACE</button>
-  <button id="diag-map-btn">MAP &rarr;</button>
+  <header class="diag-toolbar">
+    <button id="diag-back" class="nav-button">&larr; Face</button>
+    <div class="diag-heading">
+      <h1 class="diag-header">Diagnostics</h1>
+      <p class="diag-hint">Tap an entry to show or hide details</p>
+    </div>
+    <button id="diag-map-btn" class="nav-button">Map &rarr;</button>
+  </header>
   <div id="diag-list"></div>
 </div>
 
 <div id="map-layer" hidden>
-  <button id="map-back">&larr; DIAGNOSTICS</button>
+  <button id="map-back" class="nav-button">&larr; Diagnostics</button>
   <canvas id="map-canvas"></canvas>
   <div id="map-empty">NO MAP DATA</div>
+  <div id="map-legend"><span class="robot">▲ ROBOT</span><span class="goal">⊕ GOAL</span><span class="path">━ PATH</span></div>
 </div>
 
 <script>
@@ -147,41 +172,72 @@
   let mouth = 0, mouthTarget = 0, mouthAt = 0;
   let diagnostics = [];
   let diagRenderTimer = null;
-  const DIAG_RENDER_INTERVAL_MS = 300; // caps re-render rate so a fast /diagnostics publisher doesn't flicker the HUD
+  const diagRows = new Map();
+  const DIAG_RENDER_INTERVAL_MS = 300; // caps rendering work for frequent diagnostics updates
 
   function scheduleDiagRender() {
     if (diagLayer.hidden || diagRenderTimer) return;
     diagRenderTimer = setTimeout(() => { diagRenderTimer = null; renderDiagnostics(); }, DIAG_RENDER_INTERVAL_MS);
   }
 
+  function diagnosticElement(tag, className, text) {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
+
   function renderDiagnostics() {
     if (!diagnostics.length) {
-      diagList.innerHTML = '<div id="diag-empty">NO DIAGNOSTICS DATA</div>';
+      diagList.innerHTML = '<div id="diag-empty">No diagnostics data yet</div>';
+      diagRows.clear();
       return;
     }
-    const rows = diagnostics.map(s => {
-      const row = document.createElement('div');
-      row.className = `diag-row level-${s.level}`;
-      function add(tag, className, text) {
-        const element = document.createElement(tag);
-        element.className = className;
-        element.textContent = text;
-        row.appendChild(element);
+    document.getElementById('diag-empty')?.remove();
+    const names = new Set(diagnostics.map(s => s.name));
+    for (const [name, row] of diagRows) {
+      if (!names.has(name)) { row.remove(); diagRows.delete(name); }
+    }
+    diagnostics.forEach((s, index) => {
+      let row = diagRows.get(s.name);
+      if (!row) {
+        // Keep these nodes across updates so tapping, focus, and open state survive.
+        row = document.createElement('details');
+        const summary = document.createElement('summary');
+        const text = document.createElement('span');
+        text.append(diagnosticElement('span', 'diag-name', ''),
+                    diagnosticElement('span', 'diag-msg', ''));
+        const dot = diagnosticElement('span', 'diag-dot', '');
+        dot.setAttribute('aria-hidden', 'true');
+        summary.append(dot, text, diagnosticElement('span', 'diag-level', ''));
+        row.append(summary, diagnosticElement('div', 'diag-body', ''));
+        diagRows.set(s.name, row);
       }
-      add('span', 'diag-dot', '');
-      add('span', 'diag-name', s.name);
-      add('span', 'diag-msg', s.message);
-      if (s.hardware_id) add('span', 'diag-hw', `[${s.hardware_id}]`);
-      s.values.forEach(([k, v]) => add('div', 'diag-kvs', `${k}: ${v}`));
-      return row;
+      row.className = `diag-row level-${s.level}`;
+      row.querySelector('.diag-name').textContent = s.name;
+      row.querySelector('.diag-msg').textContent = s.message;
+      row.querySelector('.diag-level').textContent = ['OK', 'Warning', 'Error', 'Stale'][s.level] || 'Unknown';
+      const body = row.querySelector('.diag-body');
+      const content = [];
+      if (s.hardware_id) content.push(diagnosticElement('div', 'diag-hw', `Hardware: ${s.hardware_id}`));
+      if (s.values.length) {
+        const values = diagnosticElement('dl', 'diag-kvs', '');
+        s.values.forEach(([k, v]) => values.append(
+          diagnosticElement('dt', '', k), diagnosticElement('dd', '', v)));
+        content.push(values);
+      }
+      if (!content.length) content.push(diagnosticElement('div', '', 'No additional details'));
+      body.replaceChildren(...content);
+      if (diagList.children[index] !== row) diagList.insertBefore(row, diagList.children[index] || null);
     });
-    diagList.replaceChildren(...rows);
   }
 
   let mapInfo = null;    // {resolution, width, height, origin} of the last-rendered map
   let mapBitmap = null;  // offscreen canvas holding the pre-rendered grid
   let mapDraw = null;    // {scale, offsetX, offsetY}: map-pixel <-> canvas-pixel
   let robotPose = null;  // [x, y, theta] in map-frame meters/radians
+  let goalPosition = null; // [x, y] in map-frame meters
+  let plannedPath = [];    // [[x, y], ...] in map-frame meters
 
   function renderMap(m) {
     mapInfo = { resolution: m.resolution, width: m.width, height: m.height, origin: m.origin };
@@ -239,7 +295,40 @@
     mapCtx.fillStyle = '#000';
     mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     mapCtx.drawImage(mapBitmap, offsetX, offsetY, mapBitmap.width * scale, mapBitmap.height * scale);
+    drawPath();
+    drawGoal();
     drawRobot();
+  }
+
+  function drawPath() {
+    if (!plannedPath.length) return;
+    mapCtx.save();
+    mapCtx.strokeStyle = '#3f6';
+    mapCtx.lineWidth = 3;
+    mapCtx.lineJoin = 'round';
+    mapCtx.lineCap = 'round';
+    mapCtx.beginPath();
+    plannedPath.forEach(([x, y], i) => {
+      const [px, py] = mapToCanvas(x, y);
+      if (i === 0) mapCtx.moveTo(px, py);
+      else mapCtx.lineTo(px, py);
+    });
+    mapCtx.stroke();
+    mapCtx.restore();
+  }
+
+  function drawGoal() {
+    if (!goalPosition) return;
+    const [px, py] = mapToCanvas(...goalPosition);
+    mapCtx.save();
+    mapCtx.strokeStyle = '#fc3';
+    mapCtx.lineWidth = 3;
+    mapCtx.beginPath();
+    mapCtx.arc(px, py, 10, 0, Math.PI * 2);
+    mapCtx.moveTo(px - 16, py); mapCtx.lineTo(px + 16, py);
+    mapCtx.moveTo(px, py - 16); mapCtx.lineTo(px, py + 16);
+    mapCtx.stroke();
+    mapCtx.restore();
   }
 
   function drawRobot() {
@@ -248,8 +337,8 @@
     mapCtx.save();
     mapCtx.translate(px, py);
     mapCtx.rotate(-robotPose[2]);
-    mapCtx.fillStyle = '#4ff';
-    mapCtx.shadowColor = '#4ff';
+    mapCtx.fillStyle = '#f0f';
+    mapCtx.shadowColor = '#f0f';
     mapCtx.shadowBlur = 12;
     mapCtx.beginPath();
     mapCtx.moveTo(14, 0);
@@ -311,6 +400,8 @@
     if (m.diagnostics) { diagnostics = m.diagnostics; scheduleDiagRender(); }
     if (m.map) renderMap(m.map);
     if (m.pose) { robotPose = m.pose; if (!mapLayer.hidden) drawMap(); }
+    if (m.goal !== undefined) { goalPosition = m.goal; if (!mapLayer.hidden) drawMap(); }
+    if (m.path !== undefined) { plannedPath = m.path; if (!mapLayer.hidden) drawMap(); }
   };
 
   let last = performance.now();
