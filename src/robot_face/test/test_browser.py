@@ -60,23 +60,39 @@ def test_diagnostics_display_ros_strings_as_text(page, http_server):
     assert page.locator('#diag-list').text_content().count(markup) == 5
 
 
-def show_panel(page, x, y):
-    page.mouse.move(x, y)
+def open_menu(page, x=500, y=200):
+    page.mouse.click(x, y)
     playwright.expect(page.locator('#controls')).to_have_css('opacity', '1')
 
 
-def test_panel_buttons_open_diagnostics_and_map(page, http_server):
+def test_face_is_default_and_a_click_opens_the_menu_to_other_screens(page, http_server):
     state = FaceState()
     open_page(page, http_server(state))
-    show_panel(page, 500, 200)
+    page.mouse.move(500, 200)
+    page.wait_for_timeout(500)
+    playwright.expect(page.locator('#controls')).to_have_css('opacity', '0')   # moving alone keeps the face clear
+
+    open_menu(page)
+    page.mouse.click(500, 200)                                                  # clicking the face again closes it
+    playwright.expect(page.locator('#controls')).to_have_css('opacity', '0')
+
+    open_menu(page)
     page.locator('#controls button[data-view="diagnostics"]').click()
     playwright.expect(page.locator('#diag-layer')).to_be_visible()
     playwright.expect(page.locator('#controls')).to_be_hidden()
     page.locator('#diag-back').click()
-    show_panel(page, 520, 220)
+    playwright.expect(page.locator('#diag-layer')).to_be_hidden()
+    playwright.expect(page.locator('#controls')).to_have_css('opacity', '0')   # back on the face, menu closed
+
+    open_menu(page, 520, 220)
     page.locator('#controls button[data-view="map"]').click()
     playwright.expect(page.locator('#map-layer')).to_be_visible()
     playwright.expect(page.locator('#map-empty')).to_be_visible()
+    page.locator('#map-face').click()
+    playwright.expect(page.locator('#map-layer')).to_be_hidden()
+
+    page.keyboard.press('m')
+    playwright.expect(page.locator('#map-layer')).to_be_visible()
     page.keyboard.press('Escape')
     playwright.expect(page.locator('#diag-layer')).to_be_visible()
 

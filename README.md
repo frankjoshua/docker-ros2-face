@@ -78,12 +78,14 @@ The page has three looks, switchable live: **murmuration** (default; a flock of 
 **liquid_glass** (an iridescent jelly blob) and **hologram** (a cyan robot head in a glass case).
 All three render the same expression rig, so a new expression is one recipe, not new art per look.
 
-**On-screen controls:** move the mouse, touch the screen or press a key and a panel slides up with
-the look selector, **Diagnostics** and **Map** buttons, all 14 expressions, a mood pad (drag for
-pleasant/unpleasant × calm/excited) and a hold-to-talk button. The eyes follow the pointer. The
-panel hides after 4 s idle and the gaze goes back to `/face/gaze`. Local input acts like one more
-publisher: the newest input wins, so a ROS message replaces what was clicked. Add `?controls=off`
-to the URL to remove the panel on a kiosk; tapping the face then opens diagnostics directly.
+**Screens and menu:** the face is the default screen. Click or tap it to open the menu: **Face /
+Diagnostics / Map** screen buttons, the look selector, all 14 expressions, a mood pad (drag for
+pleasant/unpleasant × calm/excited) and a hold-to-talk button. Click the face again, press **Close**
+or Escape to hide it; it also hides after 8 s idle. Diagnostics has **← Face** and **Map →**; the map
+has **← Diagnostics** and **Face**; Escape steps back. Keys: **D** diagnostics, **M** map. The eyes
+follow the mouse; 2.5 s after it stops, the gaze goes back to `/face/gaze`. Local input acts like
+one more publisher: the newest input wins, so a ROS message replaces what was clicked. Add
+`?controls=off` to the URL for a kiosk without the menu; tapping the face then opens diagnostics.
 
 ### Diagnostics and map
 

@@ -1,9 +1,9 @@
-// On-screen controls for people playing with the face: look selector, diagnostics/map buttons,
-// expression buttons, a mood pad and a talk button. The eyes follow the pointer. The panel shows on
-// any pointer, touch or key activity and hides when idle, so a kiosk at rest shows only the face.
+// The face is the default screen. Clicking or tapping it opens this menu: screen switcher (face,
+// diagnostics, map), look selector, expression buttons, a mood pad and a talk button. Clicking the
+// face again, "Close", Escape or a few idle seconds hide it. The eyes follow the pointer either way.
 // Local input is just another publisher: the newest input wins, and ROS messages still apply.
 
-const HIDE_MS = 4000;          // panel hides after this long without input
+const HIDE_MS = 8000;          // menu hides after this long without input
 const POINTER_GAZE_MS = 2500;  // gaze returns to the ROS target this long after the pointer stops
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 
@@ -12,20 +12,36 @@ export function createControls({ rig, vocab, setLook, currentLook, openView }) {
   root.id = "controls";
   root.innerHTML = `
     <div class="row">
-      <div class="row" role="group" aria-label="Look">${vocab.looks.map(n =>
-        `<button class="look" data-look="${n}">${n.replace("_", " ")}</button>`).join("")}
-        <button class="open-view" data-view="diagnostics">Diagnostics</button>
-        <button class="open-view" data-view="map">Map</button></div>
-      <div class="row tools">
-        <div class="pad" id="mood" tabindex="0" role="slider" aria-label="Mood: drag for valence and arousal; arrow keys move it"
-          aria-valuetext="neutral"><span class="ax">mood</span><i></i></div>
-        <button id="talk" aria-pressed="false">Hold to talk</button>
-        <label class="follow"><input type="checkbox" id="follow" checked> Eyes follow pointer</label>
-      </div>
+      <div class="row" role="group" aria-label="Screen"><span class="grp">Screen</span>
+        <button class="open-view" data-view="" aria-pressed="true">Face</button>
+        <button class="open-view" data-view="diagnostics" title="Shortcut: D">Diagnostics</button>
+        <button class="open-view" data-view="map" title="Shortcut: M">Map</button></div>
+      <div class="row" role="group" aria-label="Look"><span class="grp">Look</span>${vocab.looks.map(n =>
+        `<button class="look" data-look="${n}">${n.replace("_", " ")}</button>`).join("")}</div>
+      <button id="hide" title="Close the menu; click the face to open it again">Close ✕</button>
     </div>
-    <div class="row" role="group" aria-label="Expression">${Object.keys(vocab.presets).map(n =>
-      `<button class="expr" data-expr="${n}">${n}</button>`).join("")}</div>`;
+    <div class="row" role="group" aria-label="Expression"><span class="grp">Expression</span>${Object.keys(vocab.presets).map(n =>
+      `<button class="expr" data-expr="${n}">${n}</button>`).join("")}</div>
+    <div class="row tools">
+      <div class="pad" id="mood" tabindex="0" role="slider" aria-label="Mood: drag for valence and arousal; arrow keys move it"
+        aria-valuetext="neutral"><span class="ax">mood</span><i></i></div>
+      <button id="talk" aria-pressed="false">Hold to talk</button>
+      <label class="follow"><input type="checkbox" id="follow" checked> Eyes follow pointer</label>
+      <span class="hint">Click the face to open or close this menu · keys: D diagnostics · M map · Esc back</span>
+    </div>`;
   document.body.appendChild(root);
+  // One-time nudge so nobody has to guess that the face is clickable.
+  const nudge = Object.assign(document.createElement("div"), { id: "menu-hint", textContent: "Tap the face for the menu" });
+  document.body.appendChild(nudge);
+  setTimeout(() => nudge.remove(), 6000);
+  // The cursor hides at rest (kiosk); it shows as a pointing hand while the mouse moves over the face.
+  let movingTimer = 0;
+  addEventListener("pointermove", e => {
+    if (e.pointerType !== "mouse") return;
+    document.body.classList.add("moving");
+    clearTimeout(movingTimer);
+    movingTimer = setTimeout(() => document.body.classList.remove("moving"), 2500);
+  });
 
   const buttons = sel => [...root.querySelectorAll(sel)];
   const looks = buttons(".look"), exprs = buttons(".expr");
@@ -34,12 +50,16 @@ export function createControls({ rig, vocab, setLook, currentLook, openView }) {
 
   // visibility
   let hideTimer = 0;
+  const isOpen = () => document.body.classList.contains("ui");
+  const hide = () => { clearTimeout(hideTimer); document.body.classList.remove("ui"); };
   const show = () => {
     document.body.classList.add("ui");
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => { if (!root.matches(":hover")) document.body.classList.remove("ui"); }, HIDE_MS);
+    hideTimer = setTimeout(() => { if (!root.matches(":hover")) hide(); }, HIDE_MS);
   };
-  root.addEventListener("pointerleave", show);
+  root.addEventListener("pointermove", show);   // using the menu keeps it open
+  root.addEventListener("pointerleave", () => { if (isOpen()) show(); });
+  root.querySelector("#hide").addEventListener("click", hide);
 
   // gaze: pointer wins while it moves; ROS gaze takes over again once it stops
   let remote = [0, 0], pointerAt = 0; // pointerAt 0 = the pointer is not steering the gaze
@@ -48,9 +68,20 @@ export function createControls({ rig, vocab, setLook, currentLook, openView }) {
     pointerAt = performance.now();
     rig.gaze(clamp(e.clientX / innerWidth * 2 - 1, -1, 1), clamp(1 - e.clientY / innerHeight * 2, -1, 1));
   };
-  addEventListener("pointermove", e => { show(); gazeFromPointer(e); });
-  addEventListener("pointerdown", e => { show(); gazeFromPointer(e); });
-  addEventListener("keydown", show);
+  addEventListener("pointermove", gazeFromPointer);
+  addEventListener("pointerdown", gazeFromPointer);
+  // A click on the face itself (not the menu or an open view) toggles the menu.
+  addEventListener("click", e => {
+    if (e.target.closest("#controls, .view")) return;
+    if (isOpen()) hide(); else show();
+  });
+  addEventListener("keydown", e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || document.body.dataset.view) return;
+    const view = { d: "diagnostics", m: "map" }[e.key.toLowerCase()];
+    if (view) { hide(); openView(view); }
+    else if (e.key === "Escape") hide();
+    else if (e.key === "Enter" || e.key === " ") { if (!isOpen()) { e.preventDefault(); show(); } }
+  });
   const restore = setInterval(() => {
     if (pointerAt && performance.now() - pointerAt > POINTER_GAZE_MS) { rig.gaze(...remote); pointerAt = 0; }
   }, 250);
@@ -60,7 +91,7 @@ export function createControls({ rig, vocab, setLook, currentLook, openView }) {
     const b = e.target.closest("button");
     if (b?.dataset.look) setLook(b.dataset.look);
     if (b?.dataset.expr) rig.expression(b.dataset.expr);
-    if (b?.dataset.view) { document.body.classList.remove("ui"); openView(b.dataset.view); }
+    if (b?.dataset.view === "diagnostics" || b?.dataset.view === "map") { hide(); openView(b.dataset.view); }
   });
 
   // mood pad: valence across, arousal up

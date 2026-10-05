@@ -77,7 +77,19 @@
 body.ui #controls { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 body[data-view] #controls { display: none; }
 #controls .row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-#controls > .row:first-child { justify-content: space-between; gap: 6px 16px; }
+#controls > .row:first-child { gap: 6px 18px; }
+#controls .grp { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ui-muted); margin-right: 2px; }
+#controls #hide { margin-left: auto; }
+#controls .hint { margin-left: auto; font-size: 11px; color: var(--ui-muted); }
+#menu-hint {
+  position: fixed; left: 50%; bottom: 22px; z-index: 9; transform: translateX(-50%); pointer-events: none;
+  padding: 9px 16px; border-radius: 999px; font: 14px var(--ui-font); color: var(--ui-text); text-shadow: var(--ui-text-glow);
+  background: var(--ui-panel); border: 1px solid var(--ui-border); box-shadow: var(--ui-glow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: menu-hint 6s ease forwards;
+}
+body.ui #menu-hint, body[data-view] #menu-hint { display: none; }
+@keyframes menu-hint { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
 #controls button {
   font: inherit; color: inherit; min-height: 32px; padding: 0 9px; border-radius: 999px; cursor: pointer;
   background: var(--ui-surface); border: 1px solid var(--ui-border); text-shadow: inherit;

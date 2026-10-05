@@ -71,9 +71,10 @@ file (`web/vendor/three.module.min.js`, MIT) and mapped with an import map; no a
   Switching looks disposes the old one.
 - **`face/main.js`**: wires SSE messages to the rig and the active look. `?look=` sets the starting
   look; `?demo` runs `face/demo.js` instead of SSE; `?controls=off` drops the controls.
-- **`face/controls.js`**: on-screen panel (look selector, preset buttons, mood pad → `rig.affect`,
-  hold-to-talk → `rig.mouth`), shown on pointer/touch/key input and hidden after 4 s idle. Pointer
-  movement steers the gaze; 2.5 s after it stops the last `/face/gaze` target is restored.
+- **`face/controls.js`**: menu (screen switcher, look selector, preset buttons, mood pad →
+  `rig.affect`, hold-to-talk → `rig.mouth`). The face is the default screen; clicking it toggles the
+  menu, which also hides after 8 s idle; D/M open diagnostics/map. Pointer movement steers the gaze;
+  2.5 s after it stops the last `/face/gaze` target is restored.
 - **`face/views.js`**: Diagnostics (`/diagnostics`, merged by name, expandable rows that keep
   open/focus state across updates) and Map (`/map` grid, TF pose, goal, path; tap → `POST /goal`)
   layered over the face. Opened from the panel, or by tapping the face with `?controls=off`; Escape
