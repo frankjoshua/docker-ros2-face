@@ -72,13 +72,44 @@ expected there.
 ## Face
 
 `face_node` serves the face at `http://<robot>:8080/` and streams updates over Server-Sent Events.
-Point any kiosk browser at it (`chromium --kiosk http://localhost:8080/`). Nothing is published.
+Point any kiosk browser with WebGL 2 at it (`chromium --kiosk http://localhost:8080/`). Nothing is
+published.
 
-| Topic              | Type                  | Meaning |
-|--------------------|-----------------------|---------|
-| `/face/expression` | `std_msgs/String`     | `neutral`, `happy`, `sad`, `surprised`, `angry`, `sleepy`. Unknown values are ignored. |
-| `/face/gaze`       | `geometry_msgs/Point` | Look target. `x`, `y` in -1..1, (0,0) = straight ahead, +x right, +y up. `z` ignored. |
-| `/face/mouth`      | `std_msgs/Float32`    | Mouth opening 0..1. Publish at audio RMS rate (~20–30 Hz). Mouth closes if no sample for 300 ms. |
+The page has three looks, switchable live: **murmuration** (default; a flock of glowing particles),
+**liquid_glass** (an iridescent jelly blob) and **hologram** (a cyan robot head in a glass case).
+All three render the same expression rig, so a new expression is one recipe, not new art per look.
+
+**On-screen controls:** move the mouse, touch the screen or press a key and a panel slides up with
+the look selector, all 14 expressions, a mood pad (drag for pleasant/unpleasant × calm/excited) and
+a hold-to-talk button. The eyes follow the pointer. The panel hides after 4 s idle and the gaze goes
+back to `/face/gaze`. Local input acts like one more publisher: the newest input wins, so a ROS
+message replaces what was clicked. Add `?controls=off` to the URL to remove the panel on a kiosk.
+
+### How expressions work
+
+Expressions are defined once in
+[`web/face/vocabulary.json`](src/robot_face/robot_face/web/face/vocabulary.json) as recipes over
+**channels**: the 52 ARKit blend-shape names (`browInnerUp`, `mouthSmileLeft`, `eyeBlinkRight`, …)
+plus seven cartoon effects (`pupilDilate`, `blush`, `tears`, `sweat`, `sparkle`, `squash`,
+`stretch`), each 0..1. ARKit's `Left`/`Right` are the face's own sides, so `Left` is on the
+viewer's right. Each frame the browser composes layers, bottom to top:
+
+1. **Base:** the last `/face/expression` preset or `/face/affect` blend, whichever arrived last.
+2. **Override:** `/face/channels` values replace the base for the channels they name.
+3. **Procedural:** gaze (plus small saccades), speech from `/face/mouth`, and blinks (skipped while
+   the base already holds the eyes mostly shut).
+
+Changes to the base or override ease in and out over ~0.3 s. Each look then draws the composed
+channels through one shared geometry ([`pose.js`](src/robot_face/robot_face/web/face/pose.js)).
+
+| Topic              | Type                     | Meaning |
+|--------------------|--------------------------|---------|
+| `/face/expression` | `std_msgs/String`        | Preset: `neutral`, `happy`, `sad`, `surprised`, `angry`, `sleepy`, `joy`, `afraid`, `disgusted`, `contempt`, `skeptical`, `smitten`, `crying`, `nervous`. Unknown values are ignored. |
+| `/face/affect`     | `geometry_msgs/Point`    | Mood as `x` = valence, `y` = arousal, each -1..1; blends the nearest presets. `z` ignored. |
+| `/face/channels`   | `sensor_msgs/JointState` | Direct control: `name[]` channels, `position[]` values 0..1. Holds until the next message; an empty message clears it. A bilateral name without its side (`mouthSmile`) sets both sides. A message with an unknown name is ignored. |
+| `/face/gaze`       | `geometry_msgs/Point`    | Look target. `x`, `y` in -1..1, (0,0) = straight ahead, +x right, +y up. `z` ignored. |
+| `/face/mouth`      | `std_msgs/Float32`       | Mouth opening 0..1. Publish at audio RMS rate (~20–30 Hz). Mouth closes if no sample for 300 ms. |
+| `/face/look`       | `std_msgs/String`        | `murmuration`, `liquid_glass` or `hologram`. |
 
 Smoke test:
 
@@ -86,10 +117,19 @@ Smoke test:
 ros2 topic pub -1 /face/expression std_msgs/String "{data: happy}"
 ros2 topic pub -1 /face/gaze geometry_msgs/Point "{x: 0.8, y: 0.2}"
 ros2 topic pub -r 20 /face/mouth std_msgs/Float32 "{data: 0.7}"
+ros2 topic pub -1 /face/affect geometry_msgs/Point "{x: -0.6, y: -0.5}"
+ros2 topic pub -1 /face/channels sensor_msgs/JointState "{name: [browOuterUpLeft, tears], position: [1.0, 0.8]}"
+ros2 topic pub -1 /face/channels sensor_msgs/JointState "{}"
+ros2 topic pub -1 /face/look std_msgs/String "{data: hologram}"
 ```
 
-Parameter: `port` (default 8080). Gaze slew speed is `GAZE_SPEED` at the top of the script in
-`src/robot_face/robot_face/index.html`.
+Parameter: `port` (default 8080). Timing constants (gaze slew speed, ease times, blink) are at the
+top of [`web/face/rig.js`](src/robot_face/robot_face/web/face/rig.js); quality constants
+(particle count, texture size, pixel-ratio cap) are at the top of each file in `web/face/looks/`.
+
+Preview without ROS: `python3 -m http.server -d src/robot_face/robot_face/web 8000`, then open
+`http://localhost:8000/?demo` (a scripted tour; `?demo=looks` also cycles the looks, and
+`?look=hologram` picks the starting look). three.js r186 is vendored in `web/vendor/` (MIT).
 
 Test: `colcon test --packages-select robot_face --event-handlers console_direct+`
 

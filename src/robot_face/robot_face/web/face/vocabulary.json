@@ -1,0 +1,42 @@
+{
+  "looks": ["murmuration", "liquid_glass", "hologram"],
+  "channels": [
+    "eyeBlinkLeft", "eyeLookDownLeft", "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft", "eyeSquintLeft", "eyeWideLeft",
+    "eyeBlinkRight", "eyeLookDownRight", "eyeLookInRight", "eyeLookOutRight", "eyeLookUpRight", "eyeSquintRight", "eyeWideRight",
+    "browDownLeft", "browDownRight", "browInnerUp", "browOuterUpLeft", "browOuterUpRight",
+    "jawForward", "jawLeft", "jawRight", "jawOpen",
+    "mouthClose", "mouthFunnel", "mouthPucker", "mouthLeft", "mouthRight", "mouthSmileLeft", "mouthSmileRight",
+    "mouthFrownLeft", "mouthFrownRight", "mouthDimpleLeft", "mouthDimpleRight", "mouthStretchLeft", "mouthStretchRight",
+    "mouthRollLower", "mouthRollUpper", "mouthShrugLower", "mouthShrugUpper", "mouthPressLeft", "mouthPressRight",
+    "mouthLowerDownLeft", "mouthLowerDownRight", "mouthUpperUpLeft", "mouthUpperUpRight",
+    "cheekPuff", "cheekSquintLeft", "cheekSquintRight", "noseSneerLeft", "noseSneerRight", "tongueOut",
+    "pupilDilate", "blush", "tears", "sweat", "sparkle", "squash", "stretch"
+  ],
+  "presets": {
+    "neutral": {},
+    "happy": { "mouthSmile": 0.85, "cheekSquint": 0.55, "eyeSquint": 0.3, "jawOpen": 0.12 },
+    "sad": { "browInnerUp": 0.95, "mouthFrown": 0.75, "eyeLookDown": 0.35, "mouthShrugLower": 0.35 },
+    "surprised": { "browInnerUp": 0.85, "browOuterUp": 0.95, "eyeWide": 1, "jawOpen": 0.55, "mouthFunnel": 0.35 },
+    "angry": { "browDown": 1, "eyeSquint": 0.35, "mouthPress": 0.7, "mouthFrown": 0.35, "noseSneer": 0.3 },
+    "sleepy": { "eyeBlink": 0.62, "browInnerUp": 0.15, "eyeLookDown": 0.2, "jawOpen": 0.06 },
+    "joy": { "mouthSmile": 1, "cheekSquint": 1, "eyeSquint": 0.7, "jawOpen": 0.4, "mouthUpperUp": 0.3, "browInnerUp": 0.2 },
+    "afraid": { "browInnerUp": 1, "browOuterUp": 0.45, "browDown": 0.25, "eyeWide": 0.9, "mouthStretch": 0.8, "jawOpen": 0.25 },
+    "disgusted": { "noseSneer": 1, "mouthUpperUp": 0.55, "browDown": 0.45, "eyeSquint": 0.35, "mouthFrown": 0.4, "mouthShrugLower": 0.3 },
+    "contempt": { "mouthSmileLeft": 0.5, "mouthDimpleLeft": 0.6, "eyeSquintLeft": 0.15, "mouthLeft": 0.15 },
+    "skeptical": { "browOuterUpLeft": 0.9, "browDownRight": 0.6, "eyeSquintRight": 0.3, "mouthLeft": 0.35, "mouthPressRight": 0.3 },
+    "smitten": { "mouthSmile": 0.7, "cheekSquint": 0.4, "blush": 1, "pupilDilate": 0.9, "sparkle": 1 },
+    "crying": { "browInnerUp": 1, "mouthFrown": 0.9, "eyeSquint": 0.5, "jawOpen": 0.3, "mouthStretch": 0.4, "tears": 1 },
+    "nervous": { "browInnerUp": 0.6, "mouthStretch": 0.7, "eyeLookOutLeft": 0.5, "eyeLookInRight": 0.5, "sweat": 1, "squash": 0.3 }
+  },
+  "affect": {
+    "neutral": [0, 0],
+    "happy": [0.75, 0.35],
+    "joy": [0.8, 0.75],
+    "surprised": [0.1, 0.92],
+    "afraid": [-0.45, 0.8],
+    "angry": [-0.8, 0.5],
+    "disgusted": [-0.75, 0.05],
+    "sad": [-0.6, -0.55],
+    "sleepy": [0, -0.92]
+  }
+}
