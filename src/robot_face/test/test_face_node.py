@@ -22,11 +22,36 @@ def read_event(resp):
 
 def test_state_validates_and_keeps_last_value():
     s = FaceState()
-    assert s.expression('happy')
+    assert s.expression('joy')
     assert not s.expression('bogus')
+    assert s.look('hologram')
+    assert not s.look('bogus')
     s.gaze(2.0, -5.0)
     s.mouth(1.7)
-    assert s.values == {'expression': 'happy', 'gaze': [1.0, -1.0], 'mouth': 1.0}
+    s.affect(-3.0, 0.5)
+    assert s.values == {
+        'expression': 'joy', 'look': 'hologram', 'gaze': [1.0, -1.0], 'mouth': 1.0, 'affect': [-1.0, 0.5],
+    }
+
+
+def test_channels_expand_sides_clamp_and_reject_bad_input():
+    s = FaceState()
+    assert s.channels(['mouthSmile', 'browInnerUp', 'tears'], [0.5, 2.0, -1.0])
+    assert s.values['channels'] == {'mouthSmileLeft': 0.5, 'mouthSmileRight': 0.5, 'browInnerUp': 1.0, 'tears': 0.0}
+    assert not s.channels(['mouthGrin'], [1.0])
+    assert not s.channels(['jawOpen'], [])
+    assert s.values['channels']['browInnerUp'] == 1.0   # rejected input leaves the override in place
+    assert s.channels([], [])
+    assert s.values['channels'] == {}                   # an empty message clears the override
+
+
+def test_replay_order_is_recency_order():
+    s = FaceState()
+    s.expression('happy')
+    s.affect(0.2, 0.3)
+    s.expression('sad')     # newer than the affect, so it must replay after it
+    q = s.subscribe()
+    assert [q.get_nowait()[0] for _ in range(2)] == ['affect', 'expression']
 
 
 def test_state_diagnostics_merges_by_name():
@@ -44,27 +69,33 @@ def test_state_diagnostics_merges_by_name():
     assert s.values['diagnostics'][0]['message'] == 'low'
 
 
-def test_http_replay_live_index_404(http_server):
+def get(base, path):
+    return urllib.request.urlopen(f'{base}{path}', timeout=5)
+
+
+def test_http_events_and_static_files(http_server):
     state = FaceState()
     state.expression('happy')
     base = http_server(state)
 
-    events = urllib.request.urlopen(f'{base}/events', timeout=5)
+    events = get(base, '/events')
     assert events.headers['Content-Type'] == 'text/event-stream'
     assert read_event(events) == {'expression': 'happy'}   # replayed on connect
     state.gaze(0.5, 0.0)
     assert read_event(events) == {'gaze': [0.5, 0.0]}       # live
     events.close()
 
-    index = urllib.request.urlopen(f'{base}/', timeout=5)
-    assert index.status == 200
-    assert b'<svg' in index.read()
+    index = get(base, '/?look=hologram')
+    assert index.headers['Content-Type'].startswith('text/html')
+    assert b'face/main.js' in index.read()
+    assert get(base, '/face/vocabulary.json').headers['Content-Type'] == 'application/json'
+    assert get(base, '/face/ui.css').headers['Content-Type'].startswith('text/css')
+    assert get(base, '/vendor/three.module.min.js').headers['Content-Type'].startswith('text/javascript')
 
-    try:
-        urllib.request.urlopen(f'{base}/nope', timeout=5)
-        assert False, 'expected 404'
-    except urllib.error.HTTPError as e:
-        assert e.code == 404
+    for path in ['/nope', '/../face_node.py', '/face/../../face_node.py', '/face/', '/.hidden']:
+        with pytest.raises(urllib.error.HTTPError) as e:
+            get(base, path)
+        assert e.value.code == 404, path
 
 
 def test_state_map_dedups_identical_pushes():

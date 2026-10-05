@@ -63,12 +63,12 @@ differently. `port` (existing) is unchanged.
   like the existing `geometry_msgs`/`diagnostic_msgs` deps — no new apt/pip packages).
 - Quaternion-from-yaw is a 4-line trig function in `face_node.py`, not a new dependency.
 
-## Browser (`index.html`)
+## Browser (`web/face/views.js`; originally in the single-file `index.html`)
 
-- Third full-screen layer, `#map-layer[hidden]`, `<canvas>` instead of SVG (raster data wants
-  pixel-level control that SVG doesn't give cheaply).
-- On a `map` event: decode the base64 grid, render once to an offscreen canvas — unknown cells
-  dark gray, free space near-black, occupied cells glowing cyan — scaled to fit the viewport.
+- Full-screen layer, `#map-layer[hidden]`, `<canvas>` (raster data wants pixel-level control).
+- On a `map` event: decode the base64 grid, render once to an offscreen canvas using the active
+  look's theme colours (unknown, free, occupied cells), scaled to fit the viewport. A look switch
+  re-renders the bitmap in the new theme.
   Store the scale/offset and the map's resolution/origin for the tap→world conversion.
 - On a `pose` event: blit the cached map bitmap plus a small glowing arrow marker at the
   robot's position/heading onto the visible canvas. Redrawing only the composite (not
