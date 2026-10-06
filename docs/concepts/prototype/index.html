@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Split Flap and ASCII Faces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0f; --surface: #151518; --surface-2: #1b1b20; --ink: #ecebe6; --muted: #9b998f;
+    --line: #2a2a30; --amber: #f2a33a; --cream: #ece4d2; --green: #9dffb8;
+    --display: "Sora", system-ui, sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); padding-inline: max(16px, 3vw); padding-block: 0 56px; }
+  .wrap { max-width: 1400px; margin-inline: auto; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance; }
+  a { color: var(--amber); }
+  code { font-family: var(--mono); font-size: .9em; }
+  header { padding-block: 40px 20px; display: grid; gap: 12px; }
+  .eb { font: 500 12px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .eb a { color: inherit; }
+  h1 { font-size: clamp(30px, 5vw, 52px); line-height: 1.05; }
+  h1 .f { color: var(--amber); } h1 .a { color: var(--green); }
+  header p { margin: 0; max-width: 72ch; color: var(--muted); }
+  h2 { font-size: 24px; margin-block: 40px 14px; }
+  h2 small { font: 13px var(--mono); color: var(--muted); font-weight: 400; margin-left: 8px; }
+
+  .stage { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 980px) { .stage { grid-template-columns: 1fr 1fr; } }
+  .screen-card { display: grid; gap: 8px; }
+  .screen { position: relative; border-radius: 14px; padding: 12px; background: #050506; box-shadow: inset 0 0 0 1px #24242a; }
+  .screen canvas { display: block; width: 100%; aspect-ratio: 1024 / 600; border-radius: 6px; }
+  .screen .full { position: absolute; top: 20px; right: 20px; }
+  .cap { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .cap h3 { font-size: 18px; }
+  .cap span { color: var(--muted); font-size: 14px; }
+
+  .panel { margin-top: 18px; display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 980px) { .panel { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
+  .box { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 14px; align-content: start; }
+  .label { font: 500 11px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+  .label output { text-transform: none; letter-spacing: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: 500 14px/1 var(--body); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; min-height: 38px; }
+  button:hover { border-color: var(--amber); }
+  button:focus-visible, input:focus-visible, .pad:focus-visible, summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--amber); color: #1a1206; border-color: var(--amber); }
+  button.new::after { content: " new"; font: 500 10px var(--mono); vertical-align: 2px; color: var(--green); }
+  button.new[aria-pressed="true"]::after { color: #1a1206; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .grp { display: grid; gap: 8px; min-width: 0; }
+  .pad { position: relative; width: 116px; height: 116px; border-radius: 10px; touch-action: none; cursor: crosshair; border: 1px solid var(--line);
+    background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat, linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat, var(--surface-2); }
+  .pad i { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--amber); left: 50%; top: 50%; pointer-events: none; }
+  .stack { display: grid; gap: 8px; }
+  input[type="range"] { accent-color: var(--amber); width: 100%; }
+  .cmd { font: 13px/1.4 var(--mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; overflow-x: auto; white-space: nowrap; }
+  .cmd span { color: var(--muted); }
+  .aus { display: grid; grid-template-columns: 50px minmax(0, 1fr) 96px 34px; gap: 6px 10px; align-items: center; font-size: 13px; }
+  .aus b { font: 600 12px var(--mono); color: var(--amber); }
+  .aus span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .aus output { font: 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .aus input.over { accent-color: var(--green); }
+  .field { display: grid; gap: 8px; }
+  .field canvas { width: 100%; aspect-ratio: 1024/600; border-radius: 6px; border: 1px solid var(--line); background: #000; }
+  #ascii, #kc.ascii { filter: drop-shadow(0 0 3px rgba(130, 255, 170, .35)); }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; font-size: 14px; }
+  .flow > div { flex: 1 1 170px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 4px; align-content: start; }
+  .flow > div b { font: 600 12px var(--mono); color: var(--amber); text-transform: uppercase; letter-spacing: .06em; }
+  .flow > i { align-self: center; color: var(--muted); font-style: normal; }
+  @media (max-width: 700px) { .flow > i { display: none; } }
+
+  .shots { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+  figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption { padding: 10px 14px; font-size: 14px; color: var(--muted); }
+  figcaption b { color: var(--ink); font-weight: 500; }
+
+  .notes { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+  .notes section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .notes h3 { font-size: 18px; margin-bottom: 8px; }
+  .notes ul { margin: 0; padding-left: 20px; display: grid; gap: 7px; }
+  .notes li::marker { color: var(--amber); }
+  .tbl { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  td code { color: var(--amber); }
+
+  .kiosk { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #000; }
+  .kiosk[hidden] { display: none; }
+  .kiosk canvas { width: min(100vw, calc(100vh * 1024 / 600)); aspect-ratio: 1024/600; }
+  .kiosk button { position: fixed; top: 12px; right: 12px; opacity: .3; }
+  .kiosk button:hover, .kiosk button:focus-visible { opacity: 1; }
+  body.kiosk-open { overflow: hidden; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eb"><a href="https://github.com/frankjoshua/docker-ros2-face">docker-ros2-face</a> · concepts 07 + 08 · how they'd work · 2026-10-05</div>
+    <h1><span class="f">Split flap</span> and <span class="a">ASCII</span>, running</h1>
+    <p>Both concepts run here for real, driven by one expression rig. Expressions are recipes of FACS Action Units. The rig draws a plain "face field" from the current Action Units, and each look samples that field onto its own grid: the split-flap board picks a flap shape per tile and flips to it, and the ASCII face picks a character per cell. The controls stand in for the robot's <code>/face/*</code> topics; nothing here connects to ROS.</p>
+  </header>
+
+  <section class="stage">
+    <div class="screen-card">
+      <div class="screen"><canvas id="flap" role="img" aria-label="Split-flap face, animated"></canvas><button class="full" data-k="flap">Full screen</button></div>
+      <div class="cap"><h3>07 Split flap</h3><span>24 × 14 tiles · 30-shape flap alphabet · each tile flips to its best-matching shape</span></div>
+    </div>
+    <div class="screen-card">
+      <div class="screen"><canvas id="ascii" role="img" aria-label="ASCII face, animated"></canvas><button class="full" data-k="ascii">Full screen</button></div>
+      <div class="cap"><h3>08 ASCII</h3><span>80 × 34 characters · brightness picks the density, edges pick / \ | _ · the mouth spells the speech</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="box">
+      <div class="grp">
+        <div class="label">/face/expression <output id="expr-out">neutral</output></div>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="row">
+        <div class="grp">
+          <div class="label">/face/gaze <output id="gaze-out">+0.00 +0.00</output></div>
+          <div class="pad" id="pad" tabindex="0" role="slider" aria-label="Gaze target; arrow keys move it" aria-valuetext="x 0, y 0"><i id="dot"></i></div>
+        </div>
+        <div class="grp" style="flex:1;min-width:200px">
+          <div class="label">/face/mouth <output id="mouth-out">0.00</output></div>
+          <div class="stack">
+            <button id="speak" aria-pressed="false">Speak a line</button>
+            <div class="row" style="gap:8px">
+              <button id="demo" aria-pressed="true">Auto demo on</button>
+              <button id="sound" aria-pressed="false">Flap sound off</button>
+              <button id="center">Look ahead</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cmd"><span>$ </span><code id="cmd">ros2 topic pub -1 /face/expression std_msgs/String "{data: neutral}"</code></div>
+      <div class="field">
+        <div class="label">Face field: what both looks sample <output>debug view</output></div>
+        <canvas id="field" aria-label="The plain face field drawn from the current Action Units"></canvas>
+      </div>
+    </div>
+    <div class="box">
+      <div class="label">Action Units (FACS) <output>live values</output></div>
+      <div class="aus" id="aus"></div>
+      <p class="hint">Drag any slider to override that unit; it turns green and holds until you pick an expression. Blinks add AU45 and speech adds AU25 and AU26 on top of the recipe.</p>
+    </div>
+  </section>
+
+  <h2>The pipeline</h2>
+  <div class="flow">
+    <div><b>Topics</b><span><code>/face/expression</code> picks a recipe, <code>/face/gaze</code> moves the pupils, <code>/face/mouth</code> opens the jaw at 20 Hz.</span></div><i>→</i>
+    <div><b>AU rig</b><span>The recipe's Action Units blend in over about 200 ms. Blink (AU45) and speech (AU25 + AU26) are layered on top.</span></div><i>→</i>
+    <div><b>Face field</b><span>A plain vector face drawn from AU values: brow ends, upper and lower lids, pupils, mouth corners, jaw.</span></div><i>→</i>
+    <div><b>Sampler</b><span>Split flap: each tile picks the flap shape closest to its 8×8 patch, then flips there. ASCII: each cell picks a character by brightness and edge direction.</span></div>
+  </div>
+
+  <h2>Mock-ups <small>gpt-image-2 · the visual target for both looks</small></h2>
+  <div class="shots">
+    <figure><img src="https://artifacts.joshfrank.com/robot-face-flap-ascii/img/split-flap-expressions.webp" alt="Split-flap expression sheet: neutral, happy, sad, angry, surprised, sleepy, blink, look left, talking" loading="lazy" width="1672" height="941"><figcaption><b>Split flap</b>: nine expressions on the same board</figcaption></figure>
+    <figure><img src="https://artifacts.joshfrank.com/robot-face-flap-ascii/img/ascii-expressions.webp" alt="ASCII expression sheet: neutral, happy, sad, angry, surprised, sleepy, blink, look left, talking" loading="lazy" width="1672" height="941"><figcaption><b>ASCII</b>: nine expressions on the same head</figcaption></figure>
+    <figure><img src="https://artifacts.joshfrank.com/robot-face-flap-ascii/img/split-flap-alphabet.webp" alt="Flap alphabet: 24 split-flap tiles each printed with one segment shape" loading="lazy" width="1672" height="941"><figcaption><b>Flap alphabet</b>: the tile shapes a board is assembled from (the prototype uses 30 like these)</figcaption></figure>
+    <figure><img src="https://artifacts.joshfrank.com/robot-face-flap-ascii/img/ascii-talking.webp" alt="ASCII face talking, with the open mouth filled with the word HELLO" loading="lazy" width="1672" height="941"><figcaption><b>ASCII talking</b>: the mouth spells what's being said (the image generator misspelled one "HELLO")</figcaption></figure>
+  </div>
+
+  <h2>How expressions would work</h2>
+  <div class="notes">
+    <section>
+      <h3>One rig, many looks</h3>
+      <ul>
+        <li>Expressions are defined once, as Action Unit recipes, never per look. Split flap, ASCII and any later look are samplers of the same face field.</li>
+        <li><code>/face/expression</code> stays the preset name. A later <code>/face/au</code> topic (unit, intensity) could drive the rig directly; the presets are just named recipes.</li>
+        <li>A grid look can only show what survives sampling. At 24 × 14 tiles each eye is about 5 tiles wide, enough for slanted lids, a lifted lower lid and a pupil, but not for subtle AU2 or AU7 alone. Recipes should push those units harder or pair them.</li>
+        <li>"Afraid" isn't in the current topic list. It is shown here because the recipe (AU1+2+4+5+20+25+26) works in both looks without any per-look art.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Split flap mechanics</h3>
+      <ul>
+        <li>Every tile has a target flap shape: the alphabet shape with the smallest squared error against the tile's 8 × 8 patch of the face field. Its colour (cream eye or amber feature) comes from whichever covers more of the patch.</li>
+        <li>A tile changes only when the new shape is clearly better (hysteresis), so the board doesn't chatter while the face drifts.</li>
+        <li>A changing tile flips through up to two random shapes before landing, with per-tile jitter, which gives the cascading departures-board clatter. Mouth tiles flip straight to the target in 50 ms so speech keeps up with 20 Hz.</li>
+        <li>Gaze is quantised by the tiles: pupils hop a tile at a time with a flip, which reads as mechanical eye movement.</li>
+        <li>Optional sound: a short synthesized clack per landed flip, capped per frame.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>ASCII mechanics</h3>
+      <ul>
+        <li>The face field, plus a shaded head and ear pieces, is sampled at 2 × 2 points per cell. Brightness picks from <code>&nbsp;.:-=+*#%@</code>; strong edges pick <code>_ / | \</code> by the edge's direction.</li>
+        <li>Eyes render amber and the rest phosphor green. Pupils are holes, so they read through the character density.</li>
+        <li>When the mouth opens, the cells inside it spell the line being spoken, scrolling as it talks. A future <code>/face/say</code> text topic could feed it real words.</li>
+        <li>Topic names drift down the empty columns behind the head. A small share of cells flicker to keep it alive at rest.</li>
+        <li>The same sampler is a cheap filter for any other look: it could run as a post-process over the Murmuration particles, for example.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>For the agent defining expressions</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Expression</th><th>Recipe used here (intensity 0–1)</th></tr></thead>
+        <tbody id="recipes"></tbody>
+      </table></div>
+      <ul style="margin-top:10px">
+        <li>The rig reads 14 units: 1, 2, 4, 5, 6, 7, 12, 15, 18, 20, 24, 25, 26, 43, plus AU45 blink and continuous gaze in place of AU61–64. These are the parts a look must move independently.</li>
+        <li>"Sleepy" isn't a FACS emotion; it is AU43 held at about 0.7 with a slight AU1.</li>
+        <li>Open questions: left/right asymmetry (one brow, a wink), intensity scaling per expression, and whether blink suppression should key off AU43 rather than the name "sleepy".</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<div class="kiosk" id="kiosk" hidden><canvas id="kc"></canvas><button id="kclose">Close (Esc)</button></div>
+
+<script>
+"use strict";
+const W = 1024, H = 600, TAU = Math.PI * 2;
+const GAZE_SPEED = 3, MOUTH_TIMEOUT_MS = 300;
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const $ = id => document.getElementById(id);
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = Math.imul(n, 9); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); n ^= n >>> 15; return (n >>> 0) / 4294967296; }
+function rr(c, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+/* ---------------- FACS rig ---------------- */
+const AUS = [
+  ["AU1", "Inner brow raise"], ["AU2", "Outer brow raise"], ["AU4", "Brow lower"], ["AU5", "Upper lid raise"],
+  ["AU6", "Cheek raise"], ["AU7", "Lid tighten"], ["AU43", "Eyes close"], ["AU12", "Lip corner pull"],
+  ["AU15", "Lip corner depress"], ["AU18", "Lip pucker"], ["AU20", "Lip stretch"], ["AU24", "Lip press"],
+  ["AU25", "Lips part"], ["AU26", "Jaw drop"],
+];
+const RECIPES = {
+  neutral: {},
+  happy: { AU6: .8, AU12: 1, AU25: .25 },
+  sad: { AU1: .9, AU4: .5, AU15: .8, AU43: .2 },
+  surprised: { AU1: 1, AU2: 1, AU5: 1, AU25: 1, AU26: .6, AU18: .35 },
+  angry: { AU4: 1, AU5: .3, AU7: .8, AU24: .8 },
+  afraid: { AU1: 1, AU2: .6, AU4: .6, AU5: 1, AU20: .9, AU25: .6, AU26: .25 },
+  sleepy: { AU1: .15, AU43: .7, AU25: .1 },
+};
+const S = {
+  expr: "neutral", exprAt: -1e9, au: {}, over: {},
+  gaze: [0, 0], gazeT: [0, 0], sacc: [0, 0], saccNext: 0,
+  mouth: 0, mouthT: 0, mouthAt: -1e9, blink: 0, blinkAt: -1e9, blinkNext: 1500,
+};
+for (const [k] of AUS) S.au[k] = 0;
+const live = {}; // composed AU values for this frame
+
+/* ---------------- face field ---------------- */
+// Field colours double as labels: eye white, eye amber (g/r ≈ .78), feature amber (≈ .67), mouth inside (≈ .43).
+const EYE = "#ffffff", EYEAMB = "rgb(255,200,60)", AMB = "rgb(255,170,0)", MIN = "rgb(255,110,40)";
+function drawField(c, A, gx, gy, o) {
+  c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
+  const bob = o.bob || 0;
+  if (o.head) {
+    c.fillStyle = "rgb(80,80,80)"; c.strokeStyle = "rgb(205,205,205)"; c.lineWidth = 14;
+    for (const s of [-1, 1]) { rr(c, 512 + s * 372 - 48, 190 + bob, 96, 230, 44); c.fill(); c.stroke(); }
+    const g = c.createRadialGradient(420, 170 + bob, 30, 512, 300 + bob, 540);
+    g.addColorStop(0, "rgb(150,150,150)"); g.addColorStop(.55, "rgb(78,78,78)"); g.addColorStop(1, "rgb(40,40,40)");
+    c.fillStyle = g; rr(c, 168, 36 + bob, 688, 536, 235); c.fill(); c.stroke();
+  }
+  for (const s of [-1, 1]) eye(c, A, gx, gy, s, bob);
+  mouth(c, A, gx, gy, bob);
+}
+function eye(c, A, gx, gy, s, bob) {
+  const w = 196, h0 = 176, cx = 512 + s * 196 + gx * 26, cy = 262 + bob - gy * 16;
+  const h = h0 * (1 + .2 * A.AU5), top = cy - h / 2, bot = cy + h / 2;
+  // brow
+  const by = 262 + bob - gy * 16 - h0 / 2 - 52;
+  const xi = cx - s * (w * .4 + 20 * A.AU4), xo = cx + s * w * .46;
+  const yi = by - 54 * A.AU1 + 36 * A.AU4, yo = by - 52 * A.AU2 + 6 * A.AU4 - 4 * A.AU1;
+  c.strokeStyle = AMB; c.lineCap = "round"; c.lineWidth = 26;
+  c.beginPath(); c.moveTo(xo, yo); c.quadraticCurveTo((xi + xo) / 2, Math.min(yi, yo) - 14, xi, yi); c.stroke();
+  // eyeball
+  c.save(); c.beginPath(); c.ellipse(cx, cy, w / 2, h / 2, 0, 0, TAU); c.clip();
+  c.fillStyle = EYE; c.fillRect(cx - w, cy - h, w * 2, h * 2);
+  c.fillStyle = EYEAMB; c.fillRect(cx - w, cy + h * .14, w * 2, h); // amber lower crescent, as in the concept
+  const pr = 36 * (1 - .28 * A.AU5);
+  c.fillStyle = "#000"; c.beginPath(); c.arc(cx + gx * w * .27, cy - gy * h * .22, pr, 0, TAU); c.fill();
+  // upper lid
+  const cut = clamp(A.AU43 + .3 * A.AU7 + .12 * A.AU4 - .15 * A.AU5, 0, 1);
+  const base = top + cut * h * 1.02;
+  const li = cx - s * w / 2, lo = cx + s * w / 2;
+  const ly1 = base + (.4 * A.AU4 - .32 * A.AU1) * h, ly2 = base;
+  const sag = .14 * h * Math.min(1, cut * 3);
+  c.fillStyle = "#000"; c.beginPath();
+  c.moveTo(li - s * 20, ly1); c.quadraticCurveTo(cx, (ly1 + ly2) / 2 + sag, lo + s * 20, ly2);
+  c.lineTo(lo + s * 20, top - 80); c.lineTo(li - s * 20, top - 80); c.closePath(); c.fill();
+  if (cut > .04) { c.strokeStyle = AMB; c.lineWidth = 12; c.beginPath(); c.moveTo(li - s * 20, ly1); c.quadraticCurveTo(cx, (ly1 + ly2) / 2 + sag, lo + s * 20, ly2); c.stroke(); }
+  // lower lid (cheek raise)
+  const r = clamp(.55 * A.AU6 + .25 * A.AU7, 0, .85);
+  if (r > .01) {
+    const yc = bot - r * h * .3, ym = bot - r * h * 1.25;
+    c.fillStyle = "#000"; c.beginPath(); c.moveTo(cx - w, yc); c.quadraticCurveTo(cx, ym, cx + w, yc); c.lineTo(cx + w, bot + 80); c.lineTo(cx - w, bot + 80); c.closePath(); c.fill();
+  }
+  c.restore();
+}
+function mouth(c, A, gx, gy, bob) {
+  const mx = 512 + gx * 18, my = 470 + bob - gy * 8;
+  const w = 200 * (1 + .35 * A.AU20 + .14 * A.AU12 - .5 * A.AU18);
+  const cy = my - 40 * A.AU12 + 34 * A.AU15 - 6 * A.AU20;
+  const open = clamp(84 * A.AU26 + 24 * A.AU25 - 18 * A.AU24, 0, 130);
+  let top = my + 22 * A.AU12 - 12 * A.AU15;
+  top -= open * .9 * A.AU18;
+  const bot = top + open * 2 + open * .9 * A.AU18;
+  c.lineCap = "round"; c.lineJoin = "round"; c.lineWidth = 22 - 10 * A.AU24;
+  c.beginPath(); c.moveTo(mx - w / 2, cy); c.quadraticCurveTo(mx, top, mx + w / 2, cy); c.quadraticCurveTo(mx, bot, mx - w / 2, cy); c.closePath();
+  if (open > 3) { c.fillStyle = MIN; c.fill(); }
+  c.strokeStyle = AMB; c.stroke();
+}
+
+/* offscreen field at a given resolution, rebuilt at most once per frame */
+const fields = {};
+function sampleField(name, w, h, head, f) {
+  let F = fields[name];
+  if (!F) { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; F = fields[name] = { cv, c: cv.getContext("2d", { willReadFrequently: true }), frame: -1, d: null }; }
+  if (F.frame !== f.frame) {
+    F.frame = f.frame;
+    F.c.setTransform(w / W, 0, 0, h / H, 0, 0);
+    drawField(F.c, f.A, f.gx, f.gy, { head, bob: head ? f.bob : 0 });
+    F.d = F.c.getImageData(0, 0, w, h).data;
+  }
+  return F;
+}
+
+/* ---------------- split flap ---------------- */
+const COLS = 24, ROWS = 14, SUB = 8;
+// unit-square shapes; fill with nonzero unless eo
+const G = [];
+const gl = (fn, eo) => G.push({ fn, eo });
+gl(p => {});
+gl(p => p.rect(0, 0, 1, 1));
+gl(p => p.rect(0, 0, 1, .5)); gl(p => p.rect(0, .5, 1, .5)); gl(p => p.rect(0, 0, .5, 1)); gl(p => p.rect(.5, 0, .5, 1));
+for (const [x, y, a] of [[0, 0, 0], [1, 0, .5], [1, 1, 1], [0, 1, 1.5]]) gl(p => { p.moveTo(x, y); p.arc(x, y, 1, a * Math.PI, (a + .5) * Math.PI); p.closePath(); });
+for (const [x, y] of [[0, 0], [1, 0], [1, 1], [0, 1]]) gl(p => { p.rect(0, 0, 1, 1); p.moveTo(x + 1, y); p.arc(x, y, 1, 0, TAU); }, true);
+for (const [x, y] of [[.5, 0], [.5, 1], [0, .5], [1, .5]]) gl(p => { p.moveTo(x + .5, y); p.arc(x, y, .5, 0, TAU); });
+for (const t of [[0, 0, 1, 0, 0, 1], [0, 0, 1, 0, 1, 1], [1, 0, 1, 1, 0, 1], [0, 0, 1, 1, 0, 1]]) gl(p => { p.moveTo(t[0], t[1]); p.lineTo(t[2], t[3]); p.lineTo(t[4], t[5]); p.closePath(); });
+gl(p => { p.moveTo(.82, .5); p.arc(.5, .5, .32, 0, TAU); });
+gl(p => { p.rect(0, 0, 1, 1); p.moveTo(.82, .5); p.arc(.5, .5, .32, 0, TAU); }, true);
+gl(p => p.rect(0, .32, 1, .36));
+gl(p => p.rect(0, 0, 1, .34)); gl(p => p.rect(0, .66, 1, .34));
+gl(p => p.rect(.32, 0, .36, 1)); gl(p => p.rect(0, 0, .34, 1)); gl(p => p.rect(.66, 0, .34, 1));
+const NG = G.length;
+const MASK = G.map(g => {
+  const cv = document.createElement("canvas"); cv.width = cv.height = SUB;
+  const c = cv.getContext("2d"); c.setTransform(SUB, 0, 0, SUB, 0, 0); c.beginPath(); g.fn(c); c.fill(g.eo ? "evenodd" : "nonzero");
+  const d = c.getImageData(0, 0, SUB, SUB).data, m = new Float32Array(SUB * SUB);
+  for (let i = 0; i < SUB * SUB; i++) m[i] = d[i * 4 + 3] / 255;
+  return m;
+});
+const FLAP_COL = ["#e9e0cb", "#f0a034"];
+const cells = Array.from({ length: COLS * ROWS }, () => ({ g: 0, col: 0, tg: 0, tcol: 0, q: [], t0: 0, dur: 0, from: null, dirty: true, err: 0 }));
+let clacks = 0;
+
+function flapTargets(f) {
+  const F = sampleField("flap", COLS * SUB, ROWS * SUB, false, f), d = F.d, rowW = COLS * SUB;
+  const cov = new Float32Array(SUB * SUB);
+  for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++) {
+    let wsum = 0, asum = 0;
+    for (let y = 0; y < SUB; y++) for (let x = 0; x < SUB; x++) {
+      const i = ((cy * SUB + y) * rowW + cx * SUB + x) * 4;
+      const wv = d[i + 2] / 255, av = Math.max(0, d[i] - d[i + 2]) / 255;
+      cov[y * SUB + x] = Math.min(1, wv + av); wsum += wv; asum += av;
+    }
+    let best = 0, be = 1e9;
+    for (let g = 0; g < NG; g++) { const m = MASK[g]; let e = 0; for (let k = 0; k < 64; k++) { const t = cov[k] - m[k]; e += t * t; } if (e < be) { be = e; best = g; } }
+    const cell = cells[cy * COLS + cx];
+    const m = MASK[cell.tg]; let ce = 0; for (let k = 0; k < 64; k++) { const t = cov[k] - m[k]; ce += t * t; }
+    const col = asum > wsum ? 1 : 0;
+    if (best !== cell.tg && ce - be > 1.2) { cell.tg = best; cell.tcol = col; }
+    else if (best === cell.tg && col !== cell.tcol && Math.abs(asum - wsum) > 4) cell.tcol = col;
+  }
+}
+function flapStep(now) {
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i], mouthRow = Math.floor(i / COLS) >= 9;
+    if (c.from) {
+      if (now - c.t0 >= c.dur) { c.g = c.from.ng; c.col = c.from.ncol; c.from = null; c.dirty = true; clacks++; }
+      else continue;
+    }
+    if (!c.q.length && (c.g !== c.tg || c.col !== c.tcol)) {
+      const n = mouthRow ? 0 : (hash(i * 31 + (now | 0)) * 3) | 0;
+      for (let k = 0; k < n; k++) c.q.push([(hash(i * 7 + k + (now | 0)) * NG) | 0, hash(i + k * 3) < .5 ? 0 : 1]);
+      c.q.push([c.tg, c.tcol]);
+      c.t0 = now + (mouthRow ? 0 : hash(i * 13 + (now | 0)) * 90);
+    }
+    if (c.q.length && now >= c.t0) {
+      const [ng, ncol] = c.q.shift();
+      c.from = { ng, ncol }; c.t0 = now; c.dur = mouthRow ? 50 : 95;
+      if (c.q.length && c.q[c.q.length - 1][0] !== c.tg) { c.q = []; }
+    }
+  }
+}
+function drawGlyph(c, g, col, x, y, cw, ch) {
+  c.save(); c.translate(x, y); c.scale(cw, ch); c.beginPath(); c.rect(0, 0, 1, 1); c.clip();
+  c.beginPath(); G[g].fn(c); c.fillStyle = FLAP_COL[col]; c.fill(G[g].eo ? "evenodd" : "nonzero"); c.restore();
+}
+function half(c, g, col, x, y, cw, ch, top, k, shade) {
+  const mid = y + ch / 2;
+  c.save();
+  if (k !== 1) { c.translate(0, mid); c.scale(1, Math.max(.001, k)); c.translate(0, -mid); }
+  c.beginPath(); top ? c.rect(x, y, cw, ch / 2) : c.rect(x, mid, cw, ch / 2); c.clip();
+  c.fillStyle = top ? "#1c1c1e" : "#161618"; c.fillRect(x, y, cw, ch);
+  drawGlyph(c, g, col, x + cw * .06, y + ch * .06, cw * .88, ch * .88);
+  if (shade > 0) { c.fillStyle = `rgba(0,0,0,${shade})`; c.fillRect(x, y, cw, ch); }
+  c.restore();
+}
+function drawFlap(c, now, full) {
+  const cw = W / COLS, ch = H / ROWS;
+  if (full) { c.fillStyle = "#0a0a0b"; c.fillRect(0, 0, W, H); }
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i];
+    if (!full && !cell.dirty && !cell.from) continue;
+    const x = (i % COLS) * cw, y = Math.floor(i / COLS) * ch, ix = x + 1.5, iy = y + 1.5, iw = cw - 3, ih = ch - 3;
+    c.fillStyle = "#0a0a0b"; c.fillRect(x, y, cw, ch);
+    if (cell.from) {
+      const p = clamp((now - cell.t0) / cell.dur, 0, 1), ng = cell.from.ng, nc = cell.from.ncol;
+      half(c, ng, nc, ix, iy, iw, ih, true, 1, 0);
+      half(c, cell.g, cell.col, ix, iy, iw, ih, false, 1, 0);
+      if (p < .5) half(c, cell.g, cell.col, ix, iy, iw, ih, true, 1 - 2 * p, p * .9);
+      else half(c, ng, nc, ix, iy, iw, ih, false, 2 * p - 1, (1 - p) * .9);
+    } else {
+      half(c, cell.g, cell.col, ix, iy, iw, ih, true, 1, 0);
+      half(c, cell.g, cell.col, ix, iy, iw, ih, false, 1, 0);
+    }
+    c.fillStyle = "#050505"; c.fillRect(ix, iy + ih / 2 - 1, iw, 2);
+    c.fillStyle = "#3a3a3e"; c.fillRect(ix - 1, iy + ih / 2 - 2.5, 3, 5); c.fillRect(ix + iw - 2, iy + ih / 2 - 2.5, 3, 5);
+    cell.dirty = false;
+  }
+}
+
+/* sound: one synthesized clack, rate-capped */
+let AC = null, clackBuf = null, soundOn = false;
+function initSound() {
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  clackBuf = AC.createBuffer(1, AC.sampleRate * .018, AC.sampleRate);
+  const d = clackBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+}
+function playClacks() {
+  const n = Math.min(clacks, 5); clacks = 0;
+  if (!soundOn || !AC) return;
+  for (let k = 0; k < n; k++) {
+    const s = AC.createBufferSource(), gn = AC.createGain(), bp = AC.createBiquadFilter();
+    s.buffer = clackBuf; s.playbackRate.value = .7 + Math.random() * .7; bp.type = "bandpass"; bp.frequency.value = 1800 + Math.random() * 1500;
+    gn.gain.value = .25; s.connect(bp).connect(gn).connect(AC.destination); s.start(AC.currentTime + k * .006);
+  }
+}
+
+/* ---------------- ASCII ---------------- */
+const AC_COLS = 80, AC_ROWS = 34, RAMP = " .:-=+*#%@";
+const SAY = "HELLO I AM YOUR ROBOT. NICE TO MEET YOU. ";
+const RAIN = "/face/expression /face/gaze /face/mouth ros2 topic pub 0.42 1.00 -0.65 std_msgs/Float32 ";
+const CHARS = Array.from(new Set((RAMP + "_/|\\" + SAY + RAIN + "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").split(""))).join("");
+const CI = Object.fromEntries([...CHARS].map((ch, i) => [ch, i]));
+const PALETTE = ["#1d4a2c", "#2c6a40", "#3f8a55", "#5aa96d", "#7cc88b", "#a9e8b2", "#dcffe2", "#ffb347", "#ffd27a", "#ffe9b8", "#103a22"];
+const atlases = new Map();
+document.fonts && document.fonts.ready.then(() => atlases.clear());
+function atlas(cw, ch) {
+  const key = cw.toFixed(2) + "x" + ch.toFixed(2);
+  if (atlases.has(key)) return atlases.get(key);
+  const cv = document.createElement("canvas"); cv.width = Math.ceil(cw * CHARS.length); cv.height = Math.ceil(ch * PALETTE.length);
+  const c = cv.getContext("2d"); c.textAlign = "center"; c.textBaseline = "middle"; c.font = `500 ${ch * .86}px "IBM Plex Mono", monospace`;
+  PALETTE.forEach((col, r) => { c.fillStyle = col; [...CHARS].forEach((chr, i) => c.fillText(chr, i * cw + cw / 2, r * ch + ch / 2 + ch * .04)); });
+  const a = { cv, cw, ch }; atlases.set(key, a); return a;
+}
+const drops = Array.from({ length: AC_COLS }, (_, i) => ({ y: hash(i * 5) * AC_ROWS * 2 - AC_ROWS, v: 4 + hash(i * 11) * 9, o: (hash(i * 3) * RAIN.length) | 0 }));
+let sayScroll = 0;
+const L = new Float32Array(AC_COLS * AC_ROWS), K = new Uint8Array(AC_COLS * AC_ROWS);
+function drawAscii(c, f, I) {
+  const F = sampleField("ascii", AC_COLS * 2, AC_ROWS * 2, true, f), d = F.d, rw = AC_COLS * 2;
+  for (let y = 0; y < AC_ROWS; y++) for (let x = 0; x < AC_COLS; x++) {
+    let r = 0, g = 0, b = 0;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { const i = ((y * 2 + dy) * rw + x * 2 + dx) * 4; r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    r /= 4; g /= 4; b /= 4;
+    const k = y * AC_COLS + x;
+    L[k] = (.3 * r + .59 * g + .11 * b) / 255;
+    K[k] = r > 225 && b > .85 * r ? 1 : r > 100 && b < .35 * r ? (g / r < .55 ? 3 : g / r > .74 ? 1 : 2) : 0; // 1 eye, 2 feature, 3 mouth inside
+  }
+  const pxW = I.c.width, pxH = I.c.height, cw = pxW / AC_COLS, ch = pxH / AC_ROWS, A = atlas(cw, ch);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#020403"; c.fillRect(0, 0, pxW, pxH);
+  if (f.mouth > .08) sayScroll += f.dt * 7;
+  const blit = (chr, pal, x, y) => { const i = CI[chr]; if (i === undefined || chr === " ") return; c.drawImage(A.cv, i * A.cw, pal * A.ch, A.cw, A.ch, x * cw, y * ch, cw, ch); };
+  for (let y = 0; y < AC_ROWS; y++) for (let x = 0; x < AC_COLS; x++) {
+    const k = y * AC_COLS + x, l = L[k];
+    if (K[k] === 3) { blit(SAY[(Math.floor(sayScroll) + x + y * 7) % SAY.length], 9, x, y); continue; }
+    if (l < .045) continue;
+    let chr;
+    const gx = (x < AC_COLS - 1 ? L[k + 1] : l) - (x > 0 ? L[k - 1] : l), gy = (y < AC_ROWS - 1 ? L[k + AC_COLS] : l) - (y > 0 ? L[k - AC_COLS] : l);
+    const mag = Math.hypot(gx, gy);
+    if (mag > .32 && K[k] !== 1) {
+      const ang = (Math.atan2(gy, gx) + Math.PI) % Math.PI; // gradient direction; the edge runs across it
+      chr = ang < Math.PI / 8 || ang > 7 * Math.PI / 8 ? "|" : ang < 3 * Math.PI / 8 ? "\\" : ang < 5 * Math.PI / 8 ? "_" : "/";
+    } else chr = RAMP[Math.min(RAMP.length - 1, Math.max(1, Math.floor(l * RAMP.length)))];
+    if (hash(k * 97 + (f.frame >> 2)) < .006) chr = RAMP[Math.min(9, RAMP.indexOf(chr) + 1)] || chr;
+    const pal = K[k] === 1 ? (l > .8 ? 9 : 8) : K[k] === 2 ? 6 : Math.min(6, Math.floor(Math.sqrt(l) * 7.5));
+    blit(chr, pal, x, y);
+  }
+  for (let x = 0; x < AC_COLS; x++) { // topic-name rain in empty columns
+    const dr = drops[x]; dr.y += dr.v * f.dt;
+    if (dr.y > AC_ROWS + 12) { dr.y = -hash(x + (f.frame | 0)) * 30; dr.v = 4 + hash(x * 17 + f.frame) * 9; }
+    for (let t = 0; t < 10; t++) {
+      const y = Math.floor(dr.y) - t; if (y < 0 || y >= AC_ROWS) continue;
+      if (L[y * AC_COLS + x] >= .045) continue;
+      blit(RAIN[(dr.o + Math.floor(dr.y) - t) % RAIN.length], t === 0 ? 4 : t < 3 ? 1 : 10, x, y);
+    }
+  }
+}
+
+/* ---------------- canvases ---------------- */
+class View {
+  constructor(cv, kind) { this.c = cv; this.ctx = cv.getContext("2d"); this.kind = kind; this.k = 1; this.full = true; this.visible = true; new ResizeObserver(() => this.resize()).observe(cv); }
+  resize() { const w = this.c.clientWidth; if (!w) return; const dpr = Math.min(devicePixelRatio || 1, 2); this.c.width = Math.round(w * dpr); this.c.height = Math.round(w * dpr * H / W); this.k = this.c.width / W; this.full = true; }
+  render(f, now) {
+    if (this.kind === "flap") { this.ctx.setTransform(this.k, 0, 0, this.k, 0, 0); drawFlap(this.ctx, now, this.full); this.full = false; }
+    else if (this.kind === "ascii") drawAscii(this.ctx, f, this);
+    else { this.ctx.setTransform(this.k, 0, 0, this.k, 0, 0); drawField(this.ctx, f.A, f.gx, f.gy, { head: false }); }
+  }
+}
+const views = [new View($("flap"), "flap"), new View($("ascii"), "ascii"), new View($("field"), "field")];
+let kview = null, kioskView = null;
+
+/* ---------------- controls (topic emulation) ---------------- */
+const cmd = t => { $("cmd").textContent = t; };
+for (const name of Object.keys(RECIPES)) {
+  const b = document.createElement("button"); b.textContent = name; b.dataset.e = name; b.setAttribute("aria-pressed", name === "neutral");
+  if (name === "afraid") b.className = "new";
+  b.addEventListener("click", () => { stopDemo(); pubExpression(name); });
+  $("chips").appendChild(b);
+}
+function pubExpression(name) {
+  if (name !== S.expr) S.exprAt = performance.now();
+  S.expr = name; S.over = {};
+  document.querySelectorAll("#chips button").forEach(b => b.setAttribute("aria-pressed", b.dataset.e === name));
+  $("expr-out").textContent = name;
+  cmd(`ros2 topic pub -1 /face/expression std_msgs/String "{data: ${name}}"`);
+}
+const sg = v => (v >= 0 ? "+" : "") + v.toFixed(2);
+function pubGaze(x, y, quiet) {
+  x = clamp(x, -1, 1); y = clamp(y, -1, 1); S.gazeT = [x, y];
+  $("dot").style.left = (x + 1) * 50 + "%"; $("dot").style.top = (1 - y) * 50 + "%";
+  $("gaze-out").textContent = `${sg(x)} ${sg(y)}`; $("pad").setAttribute("aria-valuetext", `x ${x.toFixed(2)}, y ${y.toFixed(2)}`);
+  if (!quiet) cmd(`ros2 topic pub -1 /face/gaze geometry_msgs/Point "{x: ${x.toFixed(2)}, y: ${y.toFixed(2)}}"`);
+}
+function pubMouth(a) { S.mouthT = clamp(a, 0, 1); S.mouthAt = performance.now(); cmd(`ros2 topic pub -r 20 /face/mouth std_msgs/Float32 "{data: ${S.mouthT.toFixed(2)}}"`); }
+let drag = false;
+const padAt = e => { const r = $("pad").getBoundingClientRect(); pubGaze((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2); };
+$("pad").addEventListener("pointerdown", e => { stopDemo(); drag = true; $("pad").setPointerCapture(e.pointerId); padAt(e); });
+$("pad").addEventListener("pointermove", e => drag && padAt(e));
+$("pad").addEventListener("pointerup", () => { drag = false; });
+$("pad").addEventListener("keydown", e => { const d = { ArrowLeft: [-.1, 0], ArrowRight: [.1, 0], ArrowUp: [0, .1], ArrowDown: [0, -.1] }[e.key]; if (!d) return; e.preventDefault(); stopDemo(); pubGaze(S.gazeT[0] + d[0], S.gazeT[1] + d[1]); });
+$("center").addEventListener("click", () => { stopDemo(); pubGaze(0, 0); });
+let speakTimer = null;
+function speak(ms) {
+  stopSpeak(); const t0 = performance.now(), seed = (Math.random() * 1e3) | 0; $("speak").setAttribute("aria-pressed", true);
+  speakTimer = setInterval(() => {
+    const t = (performance.now() - t0) / 1000; if (t * 1000 > ms) return stopSpeak();
+    const ph = t * 4.4, syl = Math.floor(ph), pause = hash(seed + syl * 7) < .14 ? .08 : 1;
+    pubMouth(Math.pow(Math.abs(Math.sin(Math.PI * ph)), .7) * pause * (.45 + .55 * hash(seed + syl)));
+  }, 50);
+}
+function stopSpeak() { clearInterval(speakTimer); speakTimer = null; $("speak").setAttribute("aria-pressed", false); }
+$("speak").addEventListener("click", () => { stopDemo(); speakTimer ? stopSpeak() : speak(3600); });
+$("sound").addEventListener("click", () => {
+  soundOn = !soundOn; if (soundOn && !AC) initSound(); if (AC && AC.state === "suspended") AC.resume();
+  $("sound").setAttribute("aria-pressed", soundOn); $("sound").textContent = soundOn ? "Flap sound on" : "Flap sound off";
+});
+
+// AU sliders
+const auRows = {};
+for (const [k, name] of AUS) {
+  const id = "au-" + k;
+  $("aus").insertAdjacentHTML("beforeend", `<b>${k}</b><span title="${name}">${name}</span><input type="range" id="${id}" min="0" max="1" step="0.01" value="0" aria-label="${k} ${name}"><output id="${id}-o">0.00</output>`);
+  const inp = $(id);
+  inp.addEventListener("input", () => { stopDemo(); S.over[k] = +inp.value; });
+  auRows[k] = { inp, out: $(id + "-o") };
+}
+$("recipes").innerHTML = Object.entries(RECIPES).map(([n, r]) => `<tr><td>${n}</td><td>${Object.keys(r).length ? Object.entries(r).map(([k, v]) => `<code>${k}</code> ${v}`).join(" · ") : "all units at 0"}</td></tr>`).join("");
+
+// demo
+const SCRIPT = [
+  [0, () => { pubExpression("neutral"); pubGaze(0, 0); }], [1.6, () => pubGaze(.75, .2)], [3, () => pubExpression("happy")], [3.6, () => speak(2600)],
+  [6.6, () => pubGaze(-.7, 0)], [7.6, () => pubExpression("surprised")], [9.4, () => { pubExpression("angry"); pubGaze(0, 0); }],
+  [11.4, () => { pubExpression("sad"); pubGaze(-.2, -.5); }], [13.4, () => pubExpression("afraid")], [15, () => { pubExpression("sleepy"); pubGaze(0, -.3); }],
+  [18, () => { pubExpression("neutral"); pubGaze(0, 0); }], [18.8, () => speak(2400)], [22, null],
+];
+const demo = { on: !REDUCED, t0: performance.now(), i: 0 };
+function demoUI() { $("demo").setAttribute("aria-pressed", demo.on); $("demo").textContent = demo.on ? "Auto demo on" : "Resume demo"; }
+function stopDemo() { if (demo.on) { demo.on = false; demoUI(); } }
+$("demo").addEventListener("click", () => { demo.on = !demo.on; if (demo.on) { demo.t0 = performance.now(); demo.i = 0; } demoUI(); });
+demoUI();
+
+// kiosk
+function openKiosk(kind) {
+  if (kind !== "flap" && kind !== "ascii") return;
+  kioskView = kioskView || new View($("kc"), kind);
+  $("kiosk").hidden = false; document.body.classList.add("kiosk-open");
+  $("kc").className = kind; kioskView.kind = kind; kview = kioskView; requestAnimationFrame(() => kview.resize());
+  if (location.hash !== "#" + kind) history.replaceState(null, "", "#" + kind);
+}
+function closeKiosk() { $("kiosk").hidden = true; document.body.classList.remove("kiosk-open"); kview = null; views[0].full = true; history.replaceState(null, "", location.pathname); }
+document.querySelectorAll(".full").forEach(b => b.addEventListener("click", () => openKiosk(b.dataset.k)));
+$("kclose").addEventListener("click", closeKiosk);
+addEventListener("keydown", e => { if (e.key === "Escape" && kview) closeKiosk(); });
+if (location.hash === "#flap" || location.hash === "#ascii") openKiosk(location.hash.slice(1));
+addEventListener("hashchange", () => { const k = location.hash.slice(1); k === "flap" || k === "ascii" ? openKiosk(k) : kview && closeKiosk(); });
+
+/* ---------------- loop ---------------- */
+let last = performance.now(), frame = 0, asciiAcc = 0;
+const F = { A: live };
+function loop(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now; frame++;
+  if (demo.on) {
+    const t = (now - demo.t0) / 1000;
+    while (demo.i < SCRIPT.length && SCRIPT[demo.i][0] <= t) { const fn = SCRIPT[demo.i][1]; if (!fn) { demo.t0 = now; demo.i = 0; break; } fn(); demo.i++; }
+  }
+  const rec = RECIPES[S.expr], kk = 1 - Math.exp(-dt * 12);
+  for (const [k] of AUS) { const tgt = k in S.over ? S.over[k] : (rec[k] || 0); S.au[k] += (tgt - S.au[k]) * kk; }
+  const step = GAZE_SPEED * dt;
+  for (let i = 0; i < 2; i++) { const d = S.gazeT[i] - S.gaze[i]; S.gaze[i] += Math.abs(d) <= step ? d : Math.sign(d) * step; }
+  if (!REDUCED && now > S.saccNext) { S.sacc = [(Math.random() - .5) * .14, (Math.random() - .5) * .1]; S.saccNext = now + 900 + Math.random() * 2000; }
+  if (now - S.mouthAt > MOUTH_TIMEOUT_MS) S.mouthT = 0;
+  S.mouth += (S.mouthT - S.mouth) * Math.min(1, dt * 20);
+  if (S.au.AU43 < .5 && now > S.blinkNext) { S.blinkAt = now; S.blinkNext = now + (Math.random() < .15 ? 300 : 3000 + Math.random() * 4000); }
+  const bu = (now - S.blinkAt) / 160; S.blink = bu >= 0 && bu < 1 ? Math.sin(Math.PI * bu) : 0;
+
+  Object.assign(live, S.au);
+  live.AU43 = Math.max(live.AU43, S.blink);
+  live.AU25 = Math.max(live.AU25, Math.min(1, S.mouth * 1.5));
+  live.AU26 = Math.max(live.AU26, S.mouth * .85);
+  F.frame = frame; F.dt = dt; F.mouth = S.mouth;
+  F.gx = clamp(S.gaze[0] + S.sacc[0], -1, 1); F.gy = clamp(S.gaze[1] + S.sacc[1], -1, 1);
+  F.bob = REDUCED ? 0 : Math.sin(now / 1000 * 1.3) * 4;
+
+  flapTargets(F); flapStep(now); playClacks();
+  asciiAcc += dt;
+  const asciiTick = asciiAcc >= 1 / 30; if (asciiTick) { F.dt = asciiAcc; asciiAcc = 0; }
+  if (kview) { if (kview.kind === "flap") kview.render(F, now); else if (asciiTick) kview.render(F, now); }
+  else for (const v of views) {
+    if (frame % 10 === 1) { const r = v.c.getBoundingClientRect(); v.visible = r.bottom > 0 && r.top < innerHeight; if (v.visible && v.kind === "flap" && !v.wasVisible) v.full = true; v.wasVisible = v.visible; }
+    if (!v.visible) continue;
+    if (v.kind === "ascii" && !asciiTick) continue;
+    v.render(F, now);
+  }
+  if (frame % 3 === 0) {
+    $("mouth-out").textContent = S.mouth.toFixed(2);
+    for (const [k] of AUS) { const r = auRows[k]; if (document.activeElement !== r.inp) r.inp.value = live[k]; r.out.textContent = live[k].toFixed(2); r.inp.classList.toggle("over", k in S.over); }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
