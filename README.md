@@ -1,4 +1,4 @@
-# Robot Face [![CI](https://github.com/frankjoshua/docker-ros2-face/workflows/CI/badge.svg)](https://github.com/frankjoshua/docker-ros2-face/actions) [![](https://img.shields.io/docker/pulls/frankjoshua/ros2-face)](https://hub.docker.com/r/frankjoshua/ros2-face)
+# Robot Face [![CI](https://github.com/frankjoshua/docker-ros2-face/workflows/CI/badge.svg)](https://github.com/frankjoshua/docker-ros2-face/actions) [![Docker pulls](https://img.shields.io/docker/pulls/frankjoshua/ros2-face?cacheSeconds=3600)](https://hub.docker.com/r/frankjoshua/ros2-face)
 
 An animated face for the screen on your robot, driven by ROS 2 topics. One node serves a web page
 to any kiosk browser: the face reacts to expressions, gaze and speech, and the same page shows the
